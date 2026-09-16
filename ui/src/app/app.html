@@ -1,0 +1,420 @@
+<!-- Login screen -->
+<div class="login-wrap" *ngIf="!isLoggedIn">
+  <div class="login-card">
+    <div class="login-brand">Loan Platform</div>
+    <div class="login-sub">Sign in with your organization account</div>
+
+    <div class="auth-error" *ngIf="authError()">{{ authError() }}</div>
+
+    <button class="login-btn" type="button" (click)="login()" [disabled]="authLoading()">
+      {{ authLoading() ? 'Signing in...' : 'Sign in with Microsoft' }}
+    </button>
+
+    <div class="login-hint">You'll be prompted to sign in with your Entra ID account.</div>
+  </div>
+</div>
+
+<div class="dashboard" *ngIf="isLoggedIn">
+  <header class="header">
+    <div class="brand">Loan Platform</div>
+    <div class="header-right">
+      <div class="system-status">
+        <span class="system-status-label">System status</span>
+        <span class="status-dot-group">
+          <span class="status-dot" [class.status-dot--up]="serviceStatus()['origination']" title="Origination service"></span>
+          <span class="status-dot" [class.status-dot--up]="serviceStatus()['underwriting']" title="Underwriting service"></span>
+          <span class="status-dot" [class.status-dot--up]="serviceStatus()['funding']" title="Funding service"></span>
+          <span class="status-dot" [class.status-dot--up]="serviceStatus()['servicing']" title="Servicing service"></span>
+        </span>
+      </div>
+      <button class="refresh-btn" (click)="refreshAll()">Refresh</button>
+      <button class="refresh-btn" (click)="logout()">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tab-bar">
+    <button type="button" class="tab-btn" [class.tab-btn--active]="activeTab() === 'applications'" (click)="setActiveTab('applications')">
+      Applications
+    </button>
+    <button type="button" class="tab-btn" [class.tab-btn--active]="activeTab() === 'logs'" (click)="setActiveTab('logs')">
+      Logs
+      <span class="tab-live-dot" *ngIf="activeTab() === 'logs' && logsLive()"></span>
+    </button>
+  </nav>
+
+  <!-- New application: collapsed by default so checking on existing
+       applications doesn't mean scrolling past a 20+ field form first. -->
+  <section class="new-app-section" *ngIf="activeTab() === 'applications'">
+    <button class="new-app-toggle" type="button" (click)="toggleNewApplicationForm()">
+      {{ showNewApplicationForm() ? '− Cancel' : '+ New Application' }}
+    </button>
+
+    <div class="submit-card" *ngIf="showNewApplicationForm()">
+      <h2 class="section-title">Submit New Application</h2>
+      <form (ngSubmit)="submitApplication()">
+        <div class="form-group-label">Applicant</div>
+        <div class="submit-form">
+          <div class="field"><label>First Name</label><input [(ngModel)]="newApp.applicant.firstName" name="firstName" required /></div>
+          <div class="field"><label>Last Name</label><input [(ngModel)]="newApp.applicant.lastName" name="lastName" required /></div>
+          <div class="field"><label>Date of Birth</label><input type="date" [(ngModel)]="newApp.applicant.dateOfBirth" name="dateOfBirth" required /></div>
+          <div class="field"><label>SSN Last 4</label><input [(ngModel)]="newApp.applicant.ssnLastFour" name="ssnLastFour" maxlength="4" required /></div>
+          <div class="field"><label>Email</label><input type="email" [(ngModel)]="newApp.applicant.email" name="email" required /></div>
+          <div class="field"><label>Phone</label><input [(ngModel)]="newApp.applicant.phone" name="phone" required /></div>
+          <div class="field"><label>Address</label><input [(ngModel)]="newApp.applicant.addressLine1" name="addressLine1" required /></div>
+          <div class="field"><label>City</label><input [(ngModel)]="newApp.applicant.city" name="city" required /></div>
+          <div class="field"><label>State</label><input [(ngModel)]="newApp.applicant.state" name="state" maxlength="2" required /></div>
+          <div class="field"><label>Zip Code</label><input [(ngModel)]="newApp.applicant.zipCode" name="zipCode" required /></div>
+        </div>
+
+        <div class="form-group-label">Employment</div>
+        <div class="submit-form">
+          <div class="field"><label>Employer</label><input [(ngModel)]="newApp.employment.employerName" name="employerName" required /></div>
+          <div class="field"><label>Job Title</label><input [(ngModel)]="newApp.employment.jobTitle" name="jobTitle" required /></div>
+          <div class="field"><label>Monthly Income</label><input type="number" [(ngModel)]="newApp.employment.monthlyIncome" name="monthlyIncome" required /></div>
+          <div class="field"><label>Months Employed</label><input type="number" [(ngModel)]="newApp.employment.employmentMonths" name="employmentMonths" required /></div>
+        </div>
+
+        <div class="form-group-label">Vehicle</div>
+        <div class="submit-form">
+          <div class="field"><label>Year</label><input type="number" [(ngModel)]="newApp.vehicle.year" name="year" required /></div>
+          <div class="field"><label>Make</label><input [(ngModel)]="newApp.vehicle.make" name="make" required /></div>
+          <div class="field"><label>Model</label><input [(ngModel)]="newApp.vehicle.model" name="model" required /></div>
+          <div class="field"><label>VIN</label><input [(ngModel)]="newApp.vehicle.vin" name="vin" required /></div>
+          <div class="field"><label>Mileage</label><input type="number" [(ngModel)]="newApp.vehicle.mileage" name="mileage" required /></div>
+          <div class="field">
+            <label>Condition</label>
+            <select [(ngModel)]="newApp.vehicle.condition" name="condition">
+              <option value="New">New</option>
+              <option value="Used">Used</option>
+            </select>
+          </div>
+          <div class="field"><label>Sale Price</label><input type="number" [(ngModel)]="newApp.vehicle.salePrice" name="salePrice" required /></div>
+        </div>
+
+        <div class="form-group-label">Loan</div>
+        <div class="submit-form">
+          <div class="field"><label>Requested Amount</label><input type="number" [(ngModel)]="newApp.requestedAmount" name="requestedAmount" required /></div>
+          <div class="field"><label>Down Payment</label><input type="number" [(ngModel)]="newApp.downPayment" name="downPayment" required /></div>
+          <div class="field"><label>Term (months)</label><input type="number" [(ngModel)]="newApp.termMonths" name="termMonths" required /></div>
+          <div class="field">
+            <label>Channel</label>
+            <select [(ngModel)]="newApp.channel" name="channel">
+              <option value="Online">Online</option>
+              <option value="Dealer">Dealer</option>
+              <option value="Branch">Branch</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" [disabled]="submitting()">
+          {{ submitting() ? 'Submitting...' : 'Submit Application' }}
+        </button>
+      </form>
+
+      <div class="error-banner" *ngIf="error()">{{ error() }}</div>
+
+      <div class="submit-result" *ngIf="submitResult()">
+        <strong>Application {{ submitResult().applicationId }}</strong> submitted —
+        credit score {{ submitResult().creditCheck?.creditScore }} via {{ submitResult().creditCheck?.bureauName }},
+        identity {{ submitResult().identityCheck?.identityConfirmed ? 'confirmed' : 'not confirmed' }} via {{ submitResult().identityCheck?.providerName }}.
+      </div>
+    </div>
+  </section>
+
+  <!-- At-a-glance pipeline totals -->
+  <section class="pipeline-summary" *ngIf="activeTab() === 'applications'">
+    <div class="summary-stat">
+      <span class="summary-value">{{ applications.length }}</span>
+      <span class="summary-label">Submitted</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-value">{{ approvedCount }}</span>
+      <span class="summary-label">Approved</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-value">{{ deniedCount }}</span>
+      <span class="summary-label">Denied</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-value">{{ fundings.length }}</span>
+      <span class="summary-label">Funded</span>
+    </div>
+    <div class="summary-stat">
+      <span class="summary-value">{{ loans.length }}</span>
+      <span class="summary-label">Active Loans</span>
+    </div>
+  </section>
+
+  <!-- Applications: one row per application, its whole journey through
+       Underwriting / Funding / Servicing joined in by applicationId, with
+       a stage stepper showing exactly where it stands. Expand a row for
+       full detail instead of cross-referencing separate tables. -->
+  <section class="applications-section" *ngIf="activeTab() === 'applications'">
+    <h2 class="section-title">Applications</h2>
+
+    <div class="applications-list" *ngIf="applicationRows.length; else emptyApplications">
+      <div class="application-row" *ngFor="let row of applicationRows">
+        <button
+          class="application-summary"
+          type="button"
+          (click)="toggleExpand(row.application.applicationId)"
+          [attr.aria-expanded]="expandedApplicationId() === row.application.applicationId"
+        >
+          <span class="mono app-id">{{ row.application.applicationId }}</span>
+
+          <span class="app-applicant">
+            {{ row.application.applicant?.firstName }} {{ row.application.applicant?.lastName }}
+            <span class="muted app-subline">{{ row.application.applicant?.city }}, {{ row.application.applicant?.state }}</span>
+          </span>
+
+          <span class="app-vehicle">
+            {{ row.application.vehicle?.year }} {{ row.application.vehicle?.make }} {{ row.application.vehicle?.model }}
+            <span class="muted mono app-subline">{{ row.application.vehicle?.vin }}</span>
+          </span>
+
+          <span class="mono app-amount">${{ row.application.requestedAmount | number }}</span>
+
+          <span class="stage-stepper">
+            <span class="stage" *ngFor="let label of stageLabels; let i = index" [attr.data-status]="stageStatus(row, i)">
+              <span class="stage-dot"></span>
+              <span class="stage-label">{{ label }}</span>
+            </span>
+          </span>
+
+          <span class="expand-chevron" [class.expand-chevron--open]="expandedApplicationId() === row.application.applicationId">&#9662;</span>
+        </button>
+
+        <div class="application-detail" *ngIf="expandedApplicationId() === row.application.applicationId">
+          <div class="detail-grid">
+            <div class="detail-card">
+              <h4 class="detail-card-title">Applicant &amp; Vehicle</h4>
+              <dl class="detail-list">
+                <dt>Applicant</dt>
+                <dd>{{ row.application.applicant?.firstName }} {{ row.application.applicant?.lastName }}</dd>
+                <dt>Contact</dt>
+                <dd>{{ row.application.applicant?.email }} &middot; {{ row.application.applicant?.phone }}</dd>
+                <dt>Address</dt>
+                <dd>{{ row.application.applicant?.city }}, {{ row.application.applicant?.state }}</dd>
+                <dt>Vehicle</dt>
+                <dd>{{ row.application.vehicle?.year }} {{ row.application.vehicle?.make }} {{ row.application.vehicle?.model }}</dd>
+                <dt>VIN</dt>
+                <dd class="mono">{{ row.application.vehicle?.vin }}</dd>
+                <dt>Requested</dt>
+                <dd class="mono">${{ row.application.requestedAmount | number }} over {{ row.application.termMonths }}mo</dd>
+                <dt>Channel</dt>
+                <dd>{{ row.application.channel }}</dd>
+              </dl>
+            </div>
+
+            <div class="detail-card" *ngIf="row.decision as d; else pendingDecision">
+              <h4 class="detail-card-title">Underwriting Decision</h4>
+              <span class="status-badge" [attr.data-status]="d.approved ? 'Approved' : 'Denied'">{{ d.approved ? 'Approved' : 'Denied' }}</span>
+              <dl class="detail-list">
+                <dt>Reason</dt>
+                <dd>{{ d.reason }}</dd>
+                <dt>DTI / LTV</dt>
+                <dd class="mono">{{ (d.debtToIncomeRatio * 100) | number:'1.0-0' }}% / {{ (d.loanToValueRatio * 100) | number:'1.0-0' }}%</dd>
+                <ng-container *ngIf="d.approved">
+                  <dt>Approved Amount</dt>
+                  <dd class="mono">${{ d.approvedAmount | number }} @ {{ d.interestRate }}%</dd>
+                </ng-container>
+                <ng-container *ngIf="d.stipulations?.length">
+                  <dt>Stipulations</dt>
+                  <dd class="muted">{{ d.stipulations.join('; ') }}</dd>
+                </ng-container>
+                <dt>Decided</dt>
+                <dd class="muted">{{ d.decidedAt | date:'short' }}</dd>
+              </dl>
+
+              <!-- Underwriter co-pilot: internal-only, advisory summary —
+                   generated on click, never automatically, and never shown
+                   to the applicant. See app.ts's generateCopilotSummary()
+                   and UnderwritingController.GetCopilotSummary on the
+                   backend. -->
+              <div class="copilot-panel">
+                <div class="copilot-header">
+                  <span class="copilot-label">Underwriter co-pilot</span>
+                  <button
+                    type="button"
+                    class="refresh-btn"
+                    [disabled]="copilotState()[row.application.applicationId]?.loading"
+                    (click)="generateCopilotSummary(row.application.applicationId)"
+                  >{{ copilotState()[row.application.applicationId]?.loading ? 'Generating…' : (copilotState()[row.application.applicationId]?.summary ? 'Regenerate' : 'Generate summary') }}</button>
+                </div>
+
+                <p class="muted" *ngIf="copilotState()[row.application.applicationId]?.loading">Asking Claude for a summary of this application…</p>
+                <div class="error-banner" *ngIf="copilotState()[row.application.applicationId]?.error as copilotErr">{{ copilotErr }}</div>
+
+                <div class="copilot-result" *ngIf="copilotState()[row.application.applicationId]?.summary as s">
+                  <p class="copilot-disclaimer">Internal reference only — never shown to the applicant, and not a lending recommendation.</p>
+                  <p>{{ s.summary }}</p>
+
+                  <ng-container *ngIf="s.riskFactors?.length">
+                    <h5>Risk factors</h5>
+                    <ul><li *ngFor="let f of s.riskFactors">{{ f }}</li></ul>
+                  </ng-container>
+
+                  <ng-container *ngIf="s.inconsistencies?.length">
+                    <h5>Inconsistencies</h5>
+                    <ul><li *ngFor="let i of s.inconsistencies">{{ i }}</li></ul>
+                  </ng-container>
+
+                  <ng-container *ngIf="s.suggestedStipulations?.length">
+                    <h5>Suggested stipulations</h5>
+                    <ul><li *ngFor="let sp of s.suggestedStipulations">{{ sp }}</li></ul>
+                  </ng-container>
+
+                  <p class="copilot-meta muted">
+                    {{ copilotState()[row.application.applicationId]?.cached ? 'Cached — generated' : 'Generated' }}
+                    {{ copilotState()[row.application.applicationId]?.generatedAt | date:'short' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <ng-template #pendingDecision>
+              <div class="detail-card detail-card--pending">
+                <h4 class="detail-card-title">Underwriting Decision</h4>
+                <p class="muted">Awaiting underwriting review.</p>
+              </div>
+            </ng-template>
+
+            <div class="detail-card" *ngIf="row.funding as f">
+              <h4 class="detail-card-title">Funding</h4>
+              <dl class="detail-list">
+                <dt>Loan ID</dt>
+                <dd class="mono">{{ f.loanId }}</dd>
+                <dt>Funded Amount</dt>
+                <dd class="mono">${{ f.fundedAmount | number }} @ {{ f.interestRate }}%</dd>
+                <dt>Term</dt>
+                <dd class="mono">{{ f.termMonths }}mo</dd>
+                <dt>Method</dt>
+                <dd>{{ f.disbursementMethod }}</dd>
+                <dt>Funded</dt>
+                <dd class="muted">{{ f.fundedAt | date:'short' }}</dd>
+              </dl>
+            </div>
+
+            <div class="detail-card" *ngIf="row.loan as l">
+              <h4 class="detail-card-title">Loan Servicing</h4>
+              <dl class="detail-list">
+                <dt>Account #</dt>
+                <dd class="mono">{{ l.accountNumber }}</dd>
+                <dt>Principal</dt>
+                <dd class="mono">${{ l.principalAmount | number }} @ {{ l.interestRate }}%</dd>
+                <dt>Current Balance</dt>
+                <dd class="mono">${{ l.currentBalance | number }}</dd>
+                <dt>Payment Method</dt>
+                <dd>{{ l.paymentMethod }}</dd>
+                <dt>Originated</dt>
+                <dd class="muted">{{ l.originatedAt | date:'short' }}</dd>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Document extraction (Claude) — scoped to this application;
+               extractApplicationId is set automatically on expand. -->
+          <div class="doc-extract-card">
+            <h3 class="section-title">Extract Data from a Loan Document</h3>
+            <p class="doc-extract-hint">
+              Upload a pay stub, W-2, bank statement, or ID — Claude reads it and pulls out the key
+              fields below for you to review and correct before saving.
+            </p>
+
+            <div class="submit-form doc-extract-form">
+              <div class="field">
+                <label>Document Type</label>
+                <select [(ngModel)]="extractDocumentType" name="extractDocumentType">
+                  <option value="pay_stub">Pay Stub</option>
+                  <option value="w2">W-2</option>
+                  <option value="bank_statement">Bank Statement</option>
+                  <option value="id_document">Government ID</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>File</label>
+                <input type="file" accept="image/*,application/pdf" (change)="onFileSelected($event)" />
+              </div>
+              <button
+                class="submit-btn"
+                type="button"
+                (click)="extractDocument()"
+                [disabled]="extracting() || !selectedFile"
+              >
+                {{ extracting() ? 'Extracting…' : 'Extract with Claude' }}
+              </button>
+            </div>
+
+            <div class="error-banner" *ngIf="extractionError()">{{ extractionError() }}</div>
+
+            <div class="extraction-review" *ngIf="extractedDocument() as doc">
+              <h4 class="extraction-review-title">
+                Review extracted fields — {{ doc.fileName }} <span class="muted">({{ doc.documentType }})</span>
+              </h4>
+              <p class="doc-extract-hint">Claude's best read of the document. Correct anything before saving it to the application.</p>
+
+              <div class="extraction-fields">
+                <div class="field" *ngFor="let key of editableFieldKeys">
+                  <label>{{ humanizeKey(key) }}</label>
+                  <input [(ngModel)]="editableFields[key]" [name]="key" />
+                </div>
+              </div>
+
+              <div class="confidence-flags" *ngIf="editableFields['confidenceFlags']?.length">
+                <strong>Claude flagged these fields as uncertain:</strong>
+                {{ editableFields['confidenceFlags'].join(', ') }} — double-check them before saving.
+              </div>
+
+              <div class="doc-extract-actions">
+                <button class="submit-btn" type="button" (click)="confirmAndSaveDocument()" [disabled]="savingDocument() || documentSaved()">
+                  {{ documentSaved() ? 'Saved ✓' : (savingDocument() ? 'Saving…' : 'Confirm & Save to Application') }}
+                </button>
+                <button class="refresh-btn" type="button" (click)="discardExtraction()">Discard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ng-template #emptyApplications><p class="empty-state">No applications yet — submit one above.</p></ng-template>
+  </section>
+
+  <!-- Logs: live trace of every TraceLogger.Trace() call across all four
+       services (Common/Logging/TraceBuffer.cs + TraceController on each
+       service), polled every second and merged by timestamp — see
+       setActiveTab()/pollLogsOnce() in app.ts. -->
+  <section class="logs-section" *ngIf="activeTab() === 'logs'">
+    <div class="logs-toolbar">
+      <h2 class="section-title logs-title">Logs</h2>
+      <input
+        class="logs-filter"
+        type="text"
+        placeholder="Filter by application ID (e.g. APP-1A2B3C4D)"
+        [(ngModel)]="logFilter"
+        name="logFilter"
+      />
+      <span class="logs-count muted">{{ filteredLogEntries.length }} shown</span>
+      <button class="refresh-btn" type="button" (click)="toggleLogsLive()">
+        {{ logsLive() ? '⏸ Pause' : '▶ Resume' }}
+      </button>
+      <button class="refresh-btn" type="button" (click)="clearLogs()">Clear</button>
+    </div>
+
+    <div class="logs-list" *ngIf="filteredLogEntries.length; else emptyLogs">
+      <div class="log-row" *ngFor="let entry of filteredLogEntries">
+        <span class="mono log-time">{{ entry.timestamp | date:'HH:mm:ss.SSS' }}</span>
+        <span class="log-service-badge" [attr.data-service]="entry.service">{{ entry.service }}</span>
+        <span class="mono log-app-id">{{ entry.applicationId || '—' }}</span>
+        <span class="log-step">{{ entry.step }}</span>
+        <span class="log-message">
+          {{ entry.message }}
+          <span class="mono muted log-data" *ngIf="entry.data">{{ entry.data | json }}</span>
+        </span>
+      </div>
+    </div>
+    <ng-template #emptyLogs>
+      <p class="empty-state">
+        {{ logFilter ? 'No log entries match that application ID yet.' : 'No log entries yet — trigger something (submit an application, run a manual evaluation) and it will show up here within a second.' }}
+      </p>
+    </ng-template>
+  </section>
+</div>

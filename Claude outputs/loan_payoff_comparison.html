@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loan Payoff Comparison — LOAN-D93AF152</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:      #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* Original */
+    --series-2:       #eb6834; /* Accelerated */
+    --good:           #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:      #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+      --good:           #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:      #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --good:           #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px 16px 48px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--text-secondary); margin: 0; }
+  .mode-toggle {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .mode-toggle:hover { color: var(--text-primary); }
+
+  .stats { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    flex: 1 1 160px;
+  }
+  .stat .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  .stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: normal; }
+  .stat .value.good { color: var(--good); }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 20px 12px;
+    position: relative;
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; gap: 8px;}
+  .card-title { font-size: 14px; font-weight: 600; }
+  .legend { display: flex; gap: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .legend-key { width: 16px; height: 2px; border-radius: 1px; }
+  .legend-key.s1 { background: var(--series-1); }
+  .legend-key.s2 { background: var(--series-2); }
+
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .line-orig { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .line-accel { fill: none; stroke: var(--series-2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .end-dot { stroke: var(--surface-1); stroke-width: 2; }
+  .direct-label { font-size: 12px; font-weight: 600; }
+  .direct-label.s1 { fill: var(--text-primary); }
+  .direct-label.s2 { fill: var(--text-primary); }
+  .direct-sub { font-size: 11px; fill: var(--text-secondary); }
+
+  .crosshair { stroke: var(--baseline); stroke-width: 1; pointer-events: none; opacity: 0; }
+  .hover-dot { pointer-events: none; opacity: 0; }
+  .hover-dot circle { stroke: var(--surface-1); stroke-width: 2; }
+
+  #hit-layer { fill: transparent; cursor: crosshair; }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    opacity: 0;
+    transition: opacity 0.08s ease;
+    min-width: 150px;
+    z-index: 5;
+  }
+  .tooltip .t-month { color: var(--text-secondary); margin-bottom: 4px; }
+  .tooltip .t-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
+  .tooltip .t-key { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+  .tooltip .t-key .k { width: 12px; height: 2px; border-radius: 1px; }
+  .tooltip .t-key .k.s1 { background: var(--series-1); }
+  .tooltip .t-key .k.s2 { background: var(--series-2); }
+  .tooltip .t-val { font-weight: 600; color: var(--text-primary); }
+
+  .foot-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .foot-note { font-size: 11px; color: var(--text-muted); }
+  .table-toggle {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .table-toggle:hover { color: var(--text-primary); }
+
+  .table-view { display: none; margin-top: 12px; max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .table-view.open { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--surface-1);
+    text-align: right;
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:first-child, tbody td:first-child { text-align: left; }
+  tbody td { text-align: right; padding: 6px 12px; font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--gridline); color: var(--text-primary); }
+  tbody tr:last-child td { border-bottom: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Extra $50/month on LOAN-D93AF152</h1>
+      <p class="sub">Remaining balance over time — scheduled payment vs. paying $114.45/mo ($64.45 + $50 extra)</p>
+    </div>
+    <button class="mode-toggle" id="theme-toggle" type="button">Dark mode</button>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Payoff time, scheduled</div>
+      <div class="value">72 months</div>
+    </div>
+    <div class="stat">
+      <div class="label">Payoff time, with extra $50/mo</div>
+      <div class="value">38 months</div>
+    </div>
+    <div class="stat">
+      <div class="label">Months saved</div>
+      <div class="value good">34 months</div>
+    </div>
+    <div class="stat">
+      <div class="label">Interest saved</div>
+      <div class="value good">$361.28</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Remaining balance by month</div>
+      <div class="legend" role="img" aria-label="Two series: Original schedule in blue, Extra $50 per month in orange">
+        <div class="legend-item"><span class="legend-key s1"></span>Original schedule</div>
+        <div class="legend-item"><span class="legend-key s2"></span>+$50/mo extra</div>
+      </div>
+    </div>
+
+    <div style="position:relative;">
+      <svg id="chart" viewBox="0 0 760 380" role="img" aria-label="Line chart comparing loan balance over time for the original 72-month schedule versus an accelerated payoff plan of 38 months with an extra $50 monthly payment.">
+        <g id="gridlines"></g>
+        <g id="lines"></g>
+        <g id="end-dots"></g>
+        <g id="direct-labels"></g>
+        <line id="crosshair" class="crosshair" x1="0" y1="0" x2="0" y2="0"></line>
+        <g id="hover-dots" style="opacity:0"></g>
+        <rect id="hit-layer" x="0" y="0" width="760" height="330"></rect>
+      </svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <div class="foot-row">
+      <span class="foot-note">Hover or focus the chart for exact values at any month. Principal $3,900.00 · 5.90% APR.</span>
+      <button class="table-toggle" id="table-toggle" type="button" aria-expanded="false">View as table</button>
+    </div>
+
+    <div class="table-view" id="table-view">
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Original balance</th><th>+$50/mo balance</th></tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const orig = [{"month": 0, "balance": 3900.0}, {"month": 1, "balance": 3854.72}, {"month": 2, "balance": 3809.23}, {"month": 3, "balance": 3763.51}, {"month": 4, "balance": 3717.56}, {"month": 5, "balance": 3671.39}, {"month": 6, "balance": 3624.99}, {"month": 7, "balance": 3578.36}, {"month": 8, "balance": 3531.5}, {"month": 9, "balance": 3484.42}, {"month": 10, "balance": 3437.1}, {"month": 11, "balance": 3389.55}, {"month": 12, "balance": 3341.76}, {"month": 13, "balance": 3293.74}, {"month": 14, "balance": 3245.48}, {"month": 15, "balance": 3196.99}, {"month": 16, "balance": 3148.26}, {"month": 17, "balance": 3099.29}, {"month": 18, "balance": 3050.08}, {"month": 19, "balance": 3000.62}, {"month": 20, "balance": 2950.92}, {"month": 21, "balance": 2900.98}, {"month": 22, "balance": 2850.8}, {"month": 23, "balance": 2800.36}, {"month": 24, "balance": 2749.68}, {"month": 25, "balance": 2698.75}, {"month": 26, "balance": 2647.57}, {"month": 27, "balance": 2596.13}, {"month": 28, "balance": 2544.45}, {"month": 29, "balance": 2492.51}, {"month": 30, "balance": 2440.31}, {"month": 31, "balance": 2387.86}, {"month": 32, "balance": 2335.15}, {"month": 33, "balance": 2282.18}, {"month": 34, "balance": 2228.95}, {"month": 35, "balance": 2175.46}, {"month": 36, "balance": 2121.71}, {"month": 37, "balance": 2067.69}, {"month": 38, "balance": 2013.4}, {"month": 39, "balance": 1958.85}, {"month": 40, "balance": 1904.03}, {"month": 41, "balance": 1848.94}, {"month": 42, "balance": 1793.58}, {"month": 43, "balance": 1737.95}, {"month": 44, "balance": 1682.05}, {"month": 45, "balance": 1625.87}, {"month": 46, "balance": 1569.41}, {"month": 47, "balance": 1512.68}, {"month": 48, "balance": 1455.66}, {"month": 49, "balance": 1398.37}, {"month": 50, "balance": 1340.8}, {"month": 51, "balance": 1282.94}, {"month": 52, "balance": 1224.79}, {"month": 53, "balance": 1166.37}, {"month": 54, "balance": 1107.65}, {"month": 55, "balance": 1048.65}, {"month": 56, "balance": 989.35}, {"month": 57, "balance": 929.77}, {"month": 58, "balance": 869.89}, {"month": 59, "balance": 809.71}, {"month": 60, "balance": 749.24}, {"month": 61, "balance": 688.48}, {"month": 62, "balance": 627.41}, {"month": 63, "balance": 566.05}, {"month": 64, "balance": 504.38}, {"month": 65, "balance": 442.41}, {"month": 66, "balance": 380.13}, {"month": 67, "balance": 317.55}, {"month": 68, "balance": 254.66}, {"month": 69, "balance": 191.47}, {"month": 70, "balance": 127.96}, {"month": 71, "balance": 64.13}, {"month": 72, "balance": 0}];
+  const accel = [{"month": 0, "balance": 3900.0}, {"month": 1, "balance": 3804.73}, {"month": 2, "balance": 3708.99}, {"month": 3, "balance": 3612.78}, {"month": 4, "balance": 3516.1}, {"month": 5, "balance": 3418.94}, {"month": 6, "balance": 3321.3}, {"month": 7, "balance": 3223.18}, {"month": 8, "balance": 3124.58}, {"month": 9, "balance": 3025.5}, {"month": 10, "balance": 2925.93}, {"month": 11, "balance": 2825.87}, {"month": 12, "balance": 2725.32}, {"month": 13, "balance": 2624.27}, {"month": 14, "balance": 2522.73}, {"month": 15, "balance": 2420.69}, {"month": 16, "balance": 2318.14}, {"month": 17, "balance": 2215.09}, {"month": 18, "balance": 2111.53}, {"month": 19, "balance": 2007.46}, {"month": 20, "balance": 1902.88}, {"month": 21, "balance": 1797.79}, {"month": 22, "balance": 1692.18}, {"month": 23, "balance": 1586.05}, {"month": 24, "balance": 1479.4}, {"month": 25, "balance": 1372.23}, {"month": 26, "balance": 1264.53}, {"month": 27, "balance": 1156.3}, {"month": 28, "balance": 1047.54}, {"month": 29, "balance": 938.24}, {"month": 30, "balance": 828.4}, {"month": 31, "balance": 718.02}, {"month": 32, "balance": 607.1}, {"month": 33, "balance": 495.64}, {"month": 34, "balance": 383.63}, {"month": 35, "balance": 271.07}, {"month": 36, "balance": 157.95}, {"month": 37, "balance": 44.28}, {"month": 38, "balance": 0.0}];
+  const summary = {"origMonths": 72, "accelMonths": 38, "origTotalInterest": 740.43, "accelTotalInterest": 379.15, "interestSaved": 361.28, "monthsSaved": 34, "origTotalPaid": 4640.4, "accelTotalPaid": 4279.15, "origPayment": 64.45, "accelPayment": 114.45, "principal": 3900.0};
+
+  // ---- theme toggle ----
+  const themeBtn = document.getElementById('theme-toggle');
+  function applyThemeLabel() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (!document.documentElement.hasAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    themeBtn.textContent = isDark ? 'Light mode' : 'Dark mode';
+  }
+  themeBtn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    if (current === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    applyThemeLabel();
+  });
+  applyThemeLabel();
+
+  // ---- chart geometry ----
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const W = 760, H = 380;
+  const padL = 56, padR = 20, padT = 12, padB = 34;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const maxMonth = orig[orig.length - 1].month; // 72
+  const maxBalance = Math.ceil(orig[0].balance / 500) * 500; // round headroom
+
+  function xForMonth(m) { return padL + (m / maxMonth) * plotW; }
+  function yForBalance(b) { return padT + (1 - b / maxBalance) * plotH; }
+
+  const gridG = document.getElementById('gridlines');
+  const yTicks = [0, 1000, 2000, 3000, maxBalance];
+  const seen = new Set();
+  yTicks.forEach(v => {
+    if (seen.has(v)) return; seen.add(v);
+    const y = yForBalance(v);
+    const line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('x1', padL); line.setAttribute('x2', W - padR);
+    line.setAttribute('y1', y); line.setAttribute('y2', y);
+    line.setAttribute('class', v === 0 ? 'baseline' : 'gridline');
+    gridG.appendChild(line);
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('x', padL - 10); label.setAttribute('y', y + 4);
+    label.setAttribute('text-anchor', 'end');
+    label.setAttribute('class', 'axis-label');
+    label.textContent = '$' + v.toLocaleString();
+    gridG.appendChild(label);
+  });
+  const xTicks = [0, 12, 24, 36, 48, 60, 72].filter(m => m <= maxMonth);
+  xTicks.forEach(m => {
+    const x = xForMonth(m);
+    const label = document.createElementNS(svgNS, 'text');
+    label.setAttribute('x', x); label.setAttribute('y', H - padB + 18);
+    label.setAttribute('text-anchor', m === 0 ? 'start' : (m === maxMonth ? 'end' : 'middle'));
+    label.setAttribute('class', 'axis-label');
+    label.textContent = 'mo ' + m;
+    gridG.appendChild(label);
+  });
+
+  function pathFor(series) {
+    return series.map((p, i) => (i === 0 ? 'M' : 'L') + xForMonth(p.month).toFixed(2) + ',' + yForBalance(p.balance).toFixed(2)).join(' ');
+  }
+
+  const linesG = document.getElementById('lines');
+  const pOrig = document.createElementNS(svgNS, 'path');
+  pOrig.setAttribute('d', pathFor(orig));
+  pOrig.setAttribute('class', 'line-orig');
+  linesG.appendChild(pOrig);
+
+  const pAccel = document.createElementNS(svgNS, 'path');
+  pAccel.setAttribute('d', pathFor(accel));
+  pAccel.setAttribute('class', 'line-accel');
+  linesG.appendChild(pAccel);
+
+  // end markers + direct labels
+  const dotsG = document.getElementById('end-dots');
+  const labelsG = document.getElementById('direct-labels');
+
+  function endDot(series, colorVar) {
+    const last = series[series.length - 1];
+    const c = document.createElementNS(svgNS, 'circle');
+    c.setAttribute('cx', xForMonth(last.month));
+    c.setAttribute('cy', yForBalance(last.balance));
+    c.setAttribute('r', 4.5);
+    c.setAttribute('fill', colorVar);
+    c.setAttribute('class', 'end-dot');
+    dotsG.appendChild(c);
+    return last;
+  }
+  const rootStyles = getComputedStyle(document.documentElement);
+  const s1 = rootStyles.getPropertyValue('--series-1').trim() || '#2a78d6';
+  const s2 = rootStyles.getPropertyValue('--series-2').trim() || '#eb6834';
+
+  const lastOrig = endDot(orig, 'var(--series-1)');
+  const lastAccel = endDot(accel, 'var(--series-2)');
+
+  function directLabel(x, y, dx, dy, title, sub, anchor) {
+    const t1 = document.createElementNS(svgNS, 'text');
+    t1.setAttribute('x', x + dx); t1.setAttribute('y', y + dy);
+    t1.setAttribute('text-anchor', anchor);
+    t1.setAttribute('class', 'direct-label');
+    t1.textContent = title;
+    labelsG.appendChild(t1);
+    const t2 = document.createElementNS(svgNS, 'text');
+    t2.setAttribute('x', x + dx); t2.setAttribute('y', y + dy + 14);
+    t2.setAttribute('text-anchor', anchor);
+    t2.setAttribute('class', 'direct-sub');
+    t2.textContent = sub;
+    labelsG.appendChild(t2);
+  }
+
+  directLabel(xForMonth(lastAccel.month), yForBalance(lastAccel.balance), 10, -40, 'Paid off: mo ' + accel[accel.length-1].month, '+$50/mo plan', 'start');
+  directLabel(xForMonth(lastOrig.month), yForBalance(lastOrig.balance), -10, -16, 'Paid off: mo ' + orig[orig.length-1].month, 'Original schedule', 'end');
+
+  // ---- hover / crosshair / tooltip ----
+  const hit = document.getElementById('hit-layer');
+  const crosshair = document.getElementById('crosshair');
+  const hoverDotsG = document.getElementById('hover-dots');
+  const tooltip = document.getElementById('tooltip');
+  const chartEl = document.getElementById('chart');
+
+  const hoverDotOrig = document.createElementNS(svgNS, 'circle');
+  hoverDotOrig.setAttribute('r', 4.5); hoverDotOrig.setAttribute('fill', 'var(--series-1)');
+  hoverDotOrig.setAttribute('class', 'end-dot');
+  const hoverDotAccel = document.createElementNS(svgNS, 'circle');
+  hoverDotAccel.setAttribute('r', 4.5); hoverDotAccel.setAttribute('fill', 'var(--series-2)');
+  hoverDotAccel.setAttribute('class', 'end-dot');
+  hoverDotsG.appendChild(hoverDotOrig);
+  hoverDotsG.appendChild(hoverDotAccel);
+
+  function balanceAt(series, month) {
+    if (month >= series[series.length - 1].month) return series[series.length - 1].balance;
+    const idx = Math.min(month, series.length - 1);
+    return series[idx].balance;
+  }
+
+  function showAt(month) {
+    month = Math.max(0, Math.min(maxMonth, Math.round(month)));
+    const x = xForMonth(month);
+    crosshair.setAttribute('x1', x); crosshair.setAttribute('x2', x);
+    crosshair.setAttribute('y1', padT); crosshair.setAttribute('y2', H - padB);
+    crosshair.style.opacity = 1;
+
+    const bOrig = balanceAt(orig, month);
+    const bAccel = balanceAt(accel, month);
+
+    hoverDotOrig.setAttribute('cx', x); hoverDotOrig.setAttribute('cy', yForBalance(bOrig));
+    hoverDotOrig.parentElement.style.opacity = 1;
+    if (month <= accel[accel.length - 1].month) {
+      hoverDotAccel.setAttribute('cx', x); hoverDotAccel.setAttribute('cy', yForBalance(bAccel));
+      hoverDotAccel.style.display = '';
+    } else {
+      hoverDotAccel.style.display = 'none';
+    }
+
+    tooltip.innerHTML = '';
+    const mEl = document.createElement('div');
+    mEl.className = 't-month';
+    mEl.textContent = 'Month ' + month;
+    tooltip.appendChild(mEl);
+
+    function row(colorClass, label, value) {
+      const r = document.createElement('div'); r.className = 't-row';
+      const k = document.createElement('div'); k.className = 't-key';
+      const dot = document.createElement('span'); dot.className = 'k ' + colorClass;
+      const lbl = document.createElement('span'); lbl.textContent = label;
+      k.appendChild(dot); k.appendChild(lbl);
+      const v = document.createElement('div'); v.className = 't-val';
+      v.textContent = value;
+      r.appendChild(k); r.appendChild(v);
+      tooltip.appendChild(r);
+    }
+    row('s1', 'Original', '$' + bOrig.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}));
+    if (month <= accel[accel.length - 1].month) {
+      row('s2', '+$50/mo', '$' + bAccel.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}));
+    } else {
+      row('s2', '+$50/mo', 'Paid off');
+    }
+
+    tooltip.style.opacity = 1;
+    const svgRect = chartEl.getBoundingClientRect();
+    const scale = svgRect.width / W;
+    let left = x * scale + 12;
+    const tw = 170;
+    if (left + tw > svgRect.width) left = x * scale - tw - 12;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = (padT * scale + 4) + 'px';
+  }
+
+  function hide() {
+    crosshair.style.opacity = 0;
+    hoverDotsG.style.opacity = 0;
+    tooltip.style.opacity = 0;
+  }
+
+  hit.addEventListener('pointermove', (e) => {
+    const rect = chartEl.getBoundingClientRect();
+    const scale = W / rect.width;
+    const xPix = (e.clientX - rect.left) * scale;
+    const month = ((xPix - padL) / plotW) * maxMonth;
+    showAt(month);
+  });
+  hit.addEventListener('pointerleave', hide);
+  hit.setAttribute('tabindex', '0');
+  hit.addEventListener('keydown', (e) => {
+    let current = parseFloat(hit.dataset.month || '0');
+    if (e.key === 'ArrowRight') { current = Math.min(maxMonth, current + 1); showAt(current); hit.dataset.month = current; e.preventDefault(); }
+    if (e.key === 'ArrowLeft') { current = Math.max(0, current - 1); showAt(current); hit.dataset.month = current; e.preventDefault(); }
+  });
+  hit.addEventListener('focus', () => showAt(0));
+  hit.addEventListener('blur', hide);
+
+  // ---- table view ----
+  const tableBody = document.getElementById('table-body');
+  const maxLen = Math.max(orig.length, accel.length);
+  let rows = '';
+  for (let i = 0; i < maxLen; i++) {
+    const o = orig[i];
+    const a = accel[i];
+    const oCell = o ? '$' + o.balance.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+    const aCell = a ? '$' + a.balance.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : 'Paid off';
+    rows += '<tr><td>' + i + '</td><td>' + oCell + '</td><td>' + aCell + '</td></tr>';
+  }
+  tableBody.innerHTML = rows;
+
+  const tableToggle = document.getElementById('table-toggle');
+  const tableView = document.getElementById('table-view');
+  tableToggle.addEventListener('click', () => {
+    const open = tableView.classList.toggle('open');
+    tableToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    tableToggle.textContent = open ? 'Hide table' : 'View as table';
+  });
+</script>
+</body>
+</html>

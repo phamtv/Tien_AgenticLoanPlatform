@@ -1,0 +1,21 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Servicing Service", "version": "1.0.0", "description": "Subscribes to LoanFundedEvent to activate loans, then serves loan details, amortization schedules, payment history/recording, and statements." },
+  "servers": [{ "url": "http://localhost:5103" }],
+  "paths": {
+    "/api/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "OK" } } } },
+    "/api/loans": { "get": { "summary": "List all loans", "responses": { "200": { "description": "Array of loans" } } } },
+    "/api/loans/{loanId}": {
+      "get": { "summary": "Get loan by ID", "responses": { "200": { "description": "The loan" }, "404": { "description": "Not found" } } },
+      "put": { "summary": "Update loan status (Active | Delinquent | PaidOff)", "responses": { "200": { "description": "Updated" } } }
+    },
+    "/api/loans/{loanId}/balance": { "get": { "summary": "Current balance only", "responses": { "200": { "description": "Balance" } } } },
+    "/api/loans/{loanId}/schedule": { "get": { "summary": "Amortization schedule, optional ?termMonths= (default 60)", "responses": { "200": { "description": "Schedule with per-month principal/interest breakdown" } } } },
+    "/api/loans/{loanId}/payments": {
+      "get": { "summary": "Get payment history for a loan", "responses": { "200": { "description": "Array of payments" } } },
+      "post": { "summary": "Record a payment (auto-closes loan to PaidOff at zero balance)", "responses": { "200": { "description": "Payment recorded, loan balance updated" } } }
+    },
+    "/api/loans/{loanId}/statements": { "post": { "summary": "Generate a statement summary", "responses": { "200": { "description": "Statement" } } } },
+    "/events/receive": { "post": { "summary": "Internal: receives LoanFundedEvent", "responses": { "200": { "description": "OK" } } } }
+  }
+}

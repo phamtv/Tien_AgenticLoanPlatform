@@ -1,0 +1,64 @@
+/*
+ * AzureServiceBusEventBus — the real production implementation.
+ *
+ * NOT COMPILED OR RUN. This sandbox has no NuGet access (confirmed by
+ * repeated failed restores against api.nuget.org while building this
+ * project — same constraint documented in backend-dotnet/README.md).
+ * Azure.Messaging.ServiceBus is a NuGet package, so this class is written
+ * out as reference code against the real SDK's actual API surface, not
+ * compiled or tested. Saved as .txt (not .cs) so it doesn't get picked up
+ * by the build and fail. Rename to .cs once you have normal NuGet access:
+ *
+ *   dotnet add package Azure.Messaging.ServiceBus
+ *   dotnet add package Azure.Identity
+ *
+ * Then register it in place of HttpLoopbackEventBus in each service's
+ * Program.cs — IEventBus is the only thing application code depends on,
+ * so nothing else changes.
+ */
+
+using System.Text.Json;
+using Azure.Identity;
+using Azure.Messaging.ServiceBus;
+using LoanPlatform.Contracts.Events;
+using Microsoft.Extensions.Configuration;
+
+namespace LoanPlatform.Common.EventBus;
+
+public class AzureServiceBusEventBus : IEventBus, IAsyncDisposable
+{
+    private readonly ServiceBusClient _client;
+    private readonly string _topicName;
+
+    public AzureServiceBusEventBus(IConfiguration config)
+    {
+        var fullyQualifiedNamespace = config["ServiceBus:Namespace"]
+            ?? throw new InvalidOperationException("ServiceBus:Namespace must be configured.");
+        _topicName = config["ServiceBus:TopicName"] ?? "loan-platform-events";
+
+        // Managed identity in Azure, az login locally — same credential
+        // chain pattern used by the Key Vault integration.
+        _client = new ServiceBusClient(fullyQualifiedNamespace, new DefaultAzureCredential());
+    }
+
+    public async Task PublishAsync<TEvent>(TEvent @event) where TEvent : IntegrationEvent
+    {
+        await using var sender = _client.CreateSender(_topicName);
+
+        var message = new ServiceBusMessage(JsonSerializer.SerializeToUtf8Bytes(@event))
+        {
+            Subject = typeof(TEvent).Name, // used as the filter for topic subscriptions
+            MessageId = @event.EventId.ToString(),
+            CorrelationId = @event.CorrelationId,
+        };
+
+        await sender.SendMessageAsync(message);
+    }
+
+    public async ValueTask DisposeAsync() => await _client.DisposeAsync();
+}
+
+// On the receiving side, each service would run a ServiceBusProcessor as a
+// BackgroundService (IHostedService) with a subscription filtered to the
+// event types it cares about (by the Subject property set above), rather
+// than the loopback bus's generic /events/receive HTTP endpoint.

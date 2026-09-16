@@ -1,0 +1,148 @@
+name: Build Service (reusable)
+
+# Only ever invoked by main.yml via `uses:`, once per service, with that
+# service's name passed in as an input. One parameterized workflow instead
+# of five near-identical copies — the steps are identical across every
+# service, only the target differs.
+#
+# CD CHANGE (2026-09-14): this used to stop after pushing an image to
+# GitHub Container Registry (ghcr.io) — nothing ever deployed it anywhere.
+# It now builds straight into the SAME Azure Container Registry
+# infra/deploy.ps1 uses (via `az acr build`, a server-side build — no
+# local Docker needed on the runner) and then updates the live Container
+# App to that image, exactly mirroring what deploy.ps1's Phase 2/3 already
+# do by hand. A push to main now actually reaches the running deployment.
+#
+# TEST CHANGE (2026-09-14): also runs that service's integration test
+# project (Tests/<ServiceName>.Tests/) if one exists yet, before building
+# any image — a failing test blocks the deploy, it doesn't just get
+# reported after the fact.
+#
+# Requires (see infra/README.md and this repo's CI setup notes for how to
+# create these):
+#   Repository VARIABLES: AZURE_RESOURCE_GROUP, AZURE_ENV_NAME (defaults
+#     to "dev" if unset, matching infra/apps.bicepparam)
+#   Repository SECRETS: AZURE_CLIENT_ID, AZURE_TENANT_ID,
+#     AZURE_SUBSCRIPTION_ID — an Entra ID app registration with a
+#     federated credential trusting this repo's GitHub Actions OIDC token
+#     (no client secret needed/stored), granted AcrPush on the ACR and
+#     Contributor on the Container Apps in AZURE_RESOURCE_GROUP.
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Project/service name, e.g. OriginationService — must match the folder under Services/ and the .csproj name"
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Restoring the whole solution (not just this project) is deliberate:
+      # it validates that this service's ProjectReferences to Contracts/
+      # and Common/ still resolve cleanly, catching a breaking change in a
+      # shared library even when only this service's own files changed.
+      - run: dotnet restore LoanPlatform.sln
+
+      - run: dotnet build Services/${{ inputs.service_name }}/${{ inputs.service_name }}.csproj --no-restore -c Release
+
+      # Not every service has a test project yet (Tests/*.Tests/) — run it
+      # when one exists rather than failing the ones that don't. See
+      # Tests/README or each Tests/*.Tests project for what's covered.
+      # These are self-contained (their own restore, not the sln restore
+      # above), and default to the in-memory repositories since
+      # UseSqlServer isn't set here — no SQL Server needed to run them.
+      - name: Run integration tests (if present for this service)
+        run: |
+          testProj="Tests/${{ inputs.service_name }}.Tests/${{ inputs.service_name }}.Tests.csproj"
+          if [ -f "$testProj" ]; then
+            dotnet test "$testProj" -c Release
+          else
+            echo "No test project at $testProj yet — skipping."
+          fi
+
+  deploy:
+    name: Build image in ACR & deploy to Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for azure/login's OIDC federated credential exchange
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC — no stored client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve this environment's ACR
+        id: acr
+        run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          if [ -z "$RG" ]; then
+            echo "::error::AZURE_RESOURCE_GROUP repository variable is not set."
+            exit 1
+          fi
+          ACR_NAME=$(az acr list --resource-group "$RG" --query "[0].name" -o tsv)
+          if [ -z "$ACR_NAME" ]; then
+            echo "::error::No Azure Container Registry found in resource group $RG."
+            exit 1
+          fi
+          echo "acr_name=$ACR_NAME" >> "$GITHUB_OUTPUT"
+
+      # Server-side build inside ACR — same mechanism infra/deploy.ps1 uses
+      # (`az acr build`), so the image this produces is built exactly the
+      # way it's always been validated locally. Context is the repo root,
+      # not the service folder, since the Dockerfile needs Contracts/ and
+      # Common/ as build-time siblings (see that Dockerfile's own header
+      # comment).
+      - name: Build & push image (az acr build)
+        run: |
+          IMAGE_NAME=$(echo "${{ inputs.service_name }}" | tr '[:upper:]' '[:lower:]')
+          az acr build \
+            --registry "${{ steps.acr.outputs.acr_name }}" \
+            --image "loan-platform-$IMAGE_NAME:latest" \
+            --file "Services/${{ inputs.service_name }}/Dockerfile" \
+            . \
+            --build-arg USE_SQL_SERVER=true
+
+      # `az containerapp update --image ...` with a `latest` tag whose
+      # digest changed won't necessarily roll a new revision on its own —
+      # a unique --revision-suffix each time forces one, the same reason
+      # deploy.ps1 generates one. See that script's Step 6 for the
+      # matching manual version of this.
+      - name: Update the Container App to the freshly built image
+        run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          ENV_NAME="${{ vars.AZURE_ENV_NAME }}"
+          if [ -z "$ENV_NAME" ]; then
+            ENV_NAME="dev"
+          fi
+
+          IMAGE_NAME=$(echo "${{ inputs.service_name }}" | tr '[:upper:]' '[:lower:]')
+          # "originationservice" -> "origination", "mcpserver" -> "mcpserver"
+          # unchanged — matches the App names in deploy.ps1's $appImageMap.
+          SHORT_APP="${IMAGE_NAME%service}"
+
+          ACR_LOGIN_SERVER=$(az acr show --name "${{ steps.acr.outputs.acr_name }}" --query loginServer -o tsv)
+          APP_NAME="loanplat-$SHORT_APP-$ENV_NAME"
+          FULL_IMAGE="$ACR_LOGIN_SERVER/loan-platform-$IMAGE_NAME:latest"
+          REVISION_SUFFIX="deploy$(date -u +%Y%m%d%H%M%S)"
+
+          echo "-- $APP_NAME -> $FULL_IMAGE (revision suffix: $REVISION_SUFFIX) --"
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --image "$FULL_IMAGE" \
+            --revision-suffix "$REVISION_SUFFIX"

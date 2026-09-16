@@ -1,0 +1,6 @@
+{
+  "origination": "${ORIGINATION_URL}",
+  "underwriting": "${UNDERWRITING_URL}",
+  "funding": "${FUNDING_URL}",
+  "servicing": "${SERVICING_URL}"
+}

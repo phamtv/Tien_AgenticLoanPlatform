@@ -1,0 +1,12 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Underwriting Service", "version": "1.0.0", "description": "Subscribes to ApplicationReadyForUnderwritingEvent, runs a rule-based risk decision, and publishes UnderwritingDecisionEvent." },
+  "servers": [{ "url": "http://localhost:5101" }],
+  "paths": {
+    "/api/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "OK" } } } },
+    "/api/underwriting/{applicationId}/decision": { "get": { "summary": "Get the underwriting decision for an application", "responses": { "200": { "description": "The decision" }, "404": { "description": "Not decided yet" } } } },
+    "/api/underwriting/{applicationId}/risk-score": { "get": { "summary": "Get just the credit score and approval outcome", "responses": { "200": { "description": "Risk summary" } } } },
+    "/api/underwriting/{applicationId}/evaluate": { "post": { "summary": "Manually trigger a risk evaluation outside the event flow", "responses": { "200": { "description": "Decision recorded and event published" } } } },
+    "/events/receive": { "post": { "summary": "Internal: receives ApplicationReadyForUnderwritingEvent from the event bus", "responses": { "200": { "description": "OK" } } } }
+  }
+}

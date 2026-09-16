@@ -1,0 +1,159 @@
+name: Loan Platform CI/CD
+
+# Single entry point. On every push to main, figures out which service(s)
+# actually need rebuilding and calls build-service.yml only for those.
+#
+# This is NOT the simple "one folder = one independent project" pattern
+# used elsewhere — Contracts/ and Common/ are shared libraries every one
+# of the four original services depends on via ProjectReference. A change
+# there can require rebuilding all four, even if none of their own files
+# changed. So the logic here is dependency-aware:
+#
+#   - Contracts/** or Common/** changed   -> rebuild ALL FOUR original services
+#   - Services/OriginationService/** only -> rebuild ONLY OriginationService
+#   - (same per-service isolation for the other three)
+#
+# AZURE MIGRATION CHANGE: added McpServer and the Angular UI, previously
+# absent from CI entirely (a deliberate scope cut, per
+# Services/McpServer/README.md's "Not included here" section and this
+# file's own prior git history — not an oversight, just now in scope).
+#
+# McpServer.csproj has NO ProjectReference to Contracts/ or Common/ (it's
+# self-contained — HTTP calls to the other services plus its own MSAL
+# auth, nothing from the shared libraries), so it's deliberately NOT
+# rebuilt on "shared" changes the way the original four are — only on its
+# own path changing. Verify this stays true if McpServer ever grows a
+# dependency on Common/Contracts.
+#
+# The UI is a separate Node/Angular project, unrelated to the .NET shared
+# libraries, so it only rebuilds on its own path changing too.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  detect-changes:
+    name: Detect which project(s) changed
+    runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      origination: ${{ steps.filter.outputs.origination }}
+      underwriting: ${{ steps.filter.outputs.underwriting }}
+      funding: ${{ steps.filter.outputs.funding }}
+      servicing: ${{ steps.filter.outputs.servicing }}
+      mcpserver: ${{ steps.filter.outputs.mcpserver }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'Contracts/**'
+              - 'Common/**'
+            origination:
+              - 'Services/OriginationService/**'
+            underwriting:
+              - 'Services/UnderwritingService/**'
+            funding:
+              - 'Services/FundingService/**'
+            servicing:
+              - 'Services/ServicingService/**'
+            mcpserver:
+              - 'Services/McpServer/**'
+            ui:
+              - 'ui/**'
+
+  build-origination:
+    name: Origination Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.origination == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: OriginationService
+    permissions:
+      contents: read
+      packages: write
+
+  build-underwriting:
+    name: Underwriting Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.underwriting == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: UnderwritingService
+    permissions:
+      contents: read
+      packages: write
+
+  build-funding:
+    name: Funding Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.funding == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: FundingService
+    permissions:
+      contents: read
+      packages: write
+
+  build-servicing:
+    name: Servicing Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.servicing == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: ServicingService
+    permissions:
+      contents: read
+      packages: write
+
+  # AZURE MIGRATION: new job. Reuses build-service.yml unchanged — McpServer
+  # follows the same Services/<name>/<name>.csproj + Services/<name>/Dockerfile
+  # convention as the original four, so the reusable workflow needed no
+  # changes, just a new caller.
+  build-mcpserver:
+    name: MCP Server
+    needs: detect-changes
+    if: needs.detect-changes.outputs.mcpserver == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: McpServer
+    permissions:
+      contents: read
+      packages: write
+
+  # AZURE MIGRATION: new job. Not a call to build-service.yml — the UI is
+  # an Angular/Node project, not a dotnet one, so there's no
+  # "dotnet build" step to run and no ProjectReference-based "shared"
+  # rebuild trigger. The Angular build itself happens inside
+  # ui/Dockerfile's build stage, so this job just builds and pushes that
+  # image.
+  build-ui:
+    name: UI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ui
+          file: ui/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/loan-platform-ui:latest

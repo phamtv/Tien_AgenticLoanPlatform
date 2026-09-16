@@ -1,0 +1,873 @@
+:host {
+  display: block;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #14262b;
+  background: #f4f6f5;
+  min-height: 100vh;
+}
+
+.dashboard {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 32px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brand {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #14262b;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* System status: deliberately small, dot-based, and explicitly labeled -
+   these are the same four service names used as stage labels in the
+   applications list below, so this needs to read as clearly different
+   (an operational health indicator, not another navigation element)
+   rather than competing with it. */
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #eef2f1;
+}
+
+.system-status-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.status-dot-group {
+  display: flex;
+  gap: 5px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #c96a6a;
+}
+
+.status-dot--up {
+  background: #3f9463;
+}
+
+.refresh-btn {
+  margin-left: 8px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid #c9d6d2;
+  background: #ffffff;
+  color: #14262b;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.refresh-btn:hover {
+  background: #f7f9f8;
+}
+
+/* Tab bar - just two tabs (Applications / Logs), not a full nav system.
+   Deliberately understated next to .new-app-toggle below it so it reads as
+   navigation, not another action button. */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #dde5e3;
+  margin-bottom: 20px;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px;
+  margin-right: 18px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #5c7570;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  color: #14262b;
+}
+
+.tab-btn--active {
+  color: #2d6e6e;
+  border-bottom-color: #2d6e6e;
+}
+
+.tab-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3f9463;
+  animation: tab-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tab-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* New application: collapsed by default (see .new-app-toggle) */
+.new-app-section {
+  margin-bottom: 20px;
+}
+
+.new-app-toggle {
+  padding: 9px 16px;
+  border-radius: 7px;
+  border: 1px solid #2d6e6e;
+  background: #ffffff;
+  color: #2d6e6e;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.new-app-toggle:hover {
+  background: #f0f6f5;
+}
+
+/* Submit card */
+.submit-card {
+  background: #ffffff;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 14px 0;
+  color: #14262b;
+}
+
+.form-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2d6e6e;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 18px 0 8px 0;
+}
+
+.form-group-label:first-of-type {
+  margin-top: 4px;
+}
+
+.submit-form {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field select {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid #c9d6d2;
+  font-size: 13.5px;
+  font-family: 'Inter', sans-serif;
+  background: #ffffff;
+}
+
+.field label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.field input {
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid #c9d6d2;
+  font-size: 13.5px;
+  font-family: 'Inter', sans-serif;
+}
+
+.submit-btn {
+  padding: 9px 16px;
+  border-radius: 7px;
+  border: none;
+  background: #2d6e6e;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  height: fit-content;
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error-banner {
+  margin-top: 14px;
+  background: #fbe7e7;
+  color: #8f2c2c;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.submit-result {
+  margin-top: 14px;
+  background: #e6f2ea;
+  color: #1f5c39;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* Document extraction (Claude) */
+.doc-extract-card {
+  background: #ffffff;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-top: 22px;
+}
+
+.doc-extract-hint {
+  font-size: 13px;
+  color: #5c7570;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+}
+
+.doc-extract-form {
+  /* One less column than before - which application this applies to is
+     now implicit (the expanded row it lives inside), not a dropdown. */
+  grid-template-columns: 1.4fr 2fr auto;
+}
+
+.doc-extract-form input[type='file'] {
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.extraction-review {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #dde5e3;
+}
+
+.extraction-review-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #14262b;
+}
+
+.extraction-fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.confidence-flags {
+  background: #fdf3e0;
+  color: #8a5a10;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.doc-extract-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Pipeline summary - at-a-glance totals across the whole pipeline,
+   replacing the per-tab counts the old "Origination (3)" style tab labels
+   used to give. */
+.pipeline-summary {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.summary-stat {
+  flex: 1;
+  min-width: 110px;
+  background: #ffffff;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #14262b;
+}
+
+.summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: #8a9490;
+  font-size: 13.5px;
+}
+
+/* Applications list - one row per application (replacing the old four
+   separate per-service tables), expandable to show its full joined
+   detail. */
+.applications-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.application-row + .application-row {
+  border-top: 1px solid #eaefee;
+}
+
+.application-summary {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 118px 1.5fr 1.4fr 110px 2.2fr 20px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: #14262b;
+}
+
+.application-summary:hover {
+  background: #f7f9f8;
+}
+
+.app-applicant,
+.app-vehicle {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.4;
+}
+
+.app-subline {
+  font-size: 11px;
+}
+
+.app-amount {
+  text-align: right;
+}
+
+.expand-chevron {
+  color: #8a9490;
+  font-size: 11px;
+  transition: transform 0.15s ease;
+  justify-self: end;
+}
+
+.expand-chevron--open {
+  transform: rotate(180deg);
+}
+
+.application-detail {
+  padding: 6px 16px 20px 16px;
+  background: #fbfcfc;
+  border-top: 1px solid #eaefee;
+}
+
+/* Stage stepper - shows exactly where one application stands across
+   Submitted / Underwriting / Funding / Servicing, instead of that only
+   being implicit in which of four separate tables happened to list it. */
+.stage-stepper {
+  display: flex;
+  align-items: center;
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+.stage:not(:first-child)::before {
+  content: '';
+  width: 14px;
+  height: 2px;
+  background: #dde5e3;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+.stage-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #c9d6d2;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.stage-label {
+  font-size: 10px;
+  color: #8a9490;
+  white-space: nowrap;
+}
+
+.stage[data-status='done'] .stage-dot {
+  background: #2d6e6e;
+  border-color: #2d6e6e;
+}
+.stage[data-status='done'] .stage-label {
+  color: #2d6e6e;
+  font-weight: 600;
+}
+.stage[data-status='done']:not(:first-child)::before {
+  background: #2d6e6e;
+}
+
+.stage[data-status='current'] .stage-dot {
+  border-color: #2d6e6e;
+  background: #d9ebe9;
+}
+.stage[data-status='current'] .stage-label {
+  color: #14262b;
+  font-weight: 600;
+}
+
+.stage[data-status='denied'] .stage-dot {
+  background: #b23a3a;
+  border-color: #b23a3a;
+}
+.stage[data-status='denied'] .stage-label {
+  color: #8f2c2c;
+  font-weight: 600;
+}
+
+.stage[data-status='blocked'] .stage-dot {
+  border-color: #eaefee;
+  background: #eaefee;
+}
+.stage[data-status='blocked'] .stage-label {
+  color: #c3cac7;
+}
+.stage[data-status='blocked']:not(:first-child)::before {
+  background: #eaefee;
+}
+
+.stage[data-status='pending'] .stage-label {
+  color: #b7c0bc;
+}
+
+/* Expanded application detail - one card per stage of the journey */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.detail-card {
+  background: #f7f9f8;
+  border: 1px solid #eaefee;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.detail-card--pending {
+  color: #8a9490;
+}
+
+.detail-card-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  color: #14262b;
+}
+
+.detail-list {
+  margin: 10px 0 0 0;
+}
+
+.detail-list dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 8px;
+}
+
+.detail-list dt:first-of-type {
+  margin-top: 0;
+}
+
+.detail-list dd {
+  margin: 2px 0 0 0;
+  font-size: 13px;
+}
+
+.mono {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+}
+
+.muted {
+  color: #5c7570;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.status-badge[data-status="Approved"], .status-badge[data-status="Funded"] {
+  background: #e6f2ea;
+  color: #1f5c39;
+}
+
+.status-badge[data-status="Denied"] {
+  background: #fbe7e7;
+  color: #8f2c2c;
+}
+
+.status-badge[data-status="Submitted"], .status-badge[data-status="UnderwritingInProgress"] {
+  background: #fbeee2;
+  color: #8a4e1e;
+}
+
+/* Underwriter co-pilot (Claude) — lives inside the Underwriting Decision
+   detail-card, so it inherits that card's background/border rather than
+   drawing its own; the divider line below is what separates it visually
+   from the decision fields above. */
+.copilot-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #dde6e3;
+}
+
+.copilot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copilot-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.copilot-result {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.copilot-disclaimer {
+  font-size: 11px;
+  color: #8a4e1e;
+  background: #fbeee2;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin: 0 0 8px 0;
+}
+
+.copilot-result h5 {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin: 10px 0 4px 0;
+}
+
+.copilot-result ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.copilot-result li {
+  font-size: 13px;
+  margin: 2px 0;
+}
+
+.copilot-meta {
+  margin-top: 10px;
+  font-size: 11px;
+}
+
+/* Login */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: #ffffff;
+  border: 1px solid #dde5e3;
+  border-radius: 12px;
+  padding: 32px 36px;
+  width: 320px;
+  box-sizing: border-box;
+}
+
+.login-brand {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  color: #14262b;
+  margin-bottom: 4px;
+}
+
+.login-sub {
+  font-size: 13px;
+  color: #5c7570;
+  margin-bottom: 20px;
+}
+
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #3a4e49;
+}
+
+.field-input {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  margin-top: 4px;
+  margin-bottom: 14px;
+  border: 1px solid #c9d6d2;
+  border-radius: 7px;
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+.auth-error {
+  color: #8f2c2c;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 10px 0;
+  background: #2d6e6e;
+  color: #ffffff;
+  border: none;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.login-hint {
+  font-size: 11.5px;
+  color: #8a9490;
+  margin-top: 14px;
+  text-align: center;
+}
+
+/* Logs tab - live trace across all four services, newest first. Kept
+   visually distinct from the Applications table (monospace, dark labels
+   per service) since this is a debugging view, not a business record. */
+.logs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.logs-title {
+  margin: 0;
+  margin-right: 4px;
+}
+
+.logs-filter {
+  flex: 1;
+  min-width: 220px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid #c9d6d2;
+  font-size: 13px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.logs-count {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.logs-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dde5e3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+  max-height: 640px;
+  overflow-y: auto;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: 108px 92px 120px 190px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid #f1f4f3;
+}
+
+.log-row:last-child {
+  border-bottom: none;
+}
+
+.log-row:hover {
+  background: #fbfcfc;
+}
+
+.log-time {
+  color: #8a9490;
+  white-space: nowrap;
+}
+
+.log-service-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  height: fit-content;
+  background: #eef2f1;
+  color: #5c7570;
+}
+
+.log-service-badge[data-service='Origination'] {
+  background: #e3ecfa;
+  color: #2a4f8f;
+}
+
+.log-service-badge[data-service='Underwriting'] {
+  background: #eee3fa;
+  color: #5c2a8f;
+}
+
+.log-service-badge[data-service='Funding'] {
+  background: #e6f2ea;
+  color: #1f5c39;
+}
+
+.log-service-badge[data-service='Servicing'] {
+  background: #fbeee2;
+  color: #8a4e1e;
+}
+
+.log-app-id {
+  color: #14262b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-step {
+  font-weight: 600;
+  color: #2d6e6e;
+  word-break: break-word;
+}
+
+.log-message {
+  color: #14262b;
+  line-height: 1.5;
+}
+
+.log-data {
+  display: block;
+  margin-top: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+}

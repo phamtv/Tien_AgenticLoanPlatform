@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.13.0" />
+    <!-- Real Azure Service Bus client — activates AzureServiceBusEventBus.cs,
+         previously kept as an uncompiled .reference.cs.txt because this repo
+         had no NuGet access when it was first written. See that file's
+         history in EventBus/ for the full story. -->
+    <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.1" />
+    <!-- Pinned at >= 1.17.2, not the latest 1.21.0 — that's the minimum
+         Microsoft.Identity.Web.Certificate 4.13.0 (a dependency of
+         Microsoft.Identity.Web, also in this project) requires transitively.
+         A lower pin here throws NU1605 (package downgrade) on restore. -->
+    <PackageReference Include="Azure.Identity" Version="1.17.2" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Contracts\LoanPlatform.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

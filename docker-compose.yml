@@ -1,0 +1,325 @@
+# Spins up the whole platform: 5 separate application containers (one per
+# service, plus the UI) plus the MCP server plus a SQL Server container — 7
+# total. See README.md's "Deployment architecture" section for why one-
+# container-per-service is deliberate.
+#
+# Run from the repo root:
+#   docker compose up --build
+# Then open http://localhost:4200
+#
+# Two different networks are in play here, on purpose:
+#   - Browser <-> UI/services: goes over the HOST network, via the
+#     published ports below (localhost:5100-5104, localhost:4200) — the UI
+#     container reads these back out of its own env vars at startup (see
+#     ui/docker-entrypoint.sh) and writes them into /config.json for the
+#     Angular bundle to fetch, rather than baking them in at build time.
+#   - Service <-> service (the event bus, and the MCP server calling the
+#     four services) and service <-> database: goes over DOCKER'S INTERNAL
+#     network, using each container's Compose name as its DNS hostname
+#     (e.g. "underwriting", "sqlserver" — not "localhost") and internal
+#     ports, not published host ports.
+#
+# AZURE MIGRATION NOTE (2026): auth moved from a hand-rolled shared-secret
+# JWT (JwtSecret/DemoUsername/DemoPassword) to real Microsoft Entra ID
+# bearer tokens — see Common/Auth/EntraIdAuthExtensions.cs. Those three env
+# vars are gone from every service below; they're no longer read by
+# anything. AzureAd:TenantId/ClientId are non-secret identifiers already
+# baked into each service's appsettings.json, so they're not repeated here
+# either — only AZURE_AD_CLIENT_SECRET (used solely by the MCP server's
+# app-only client-credentials login) needs to come from your .env file.
+#
+# SQL Server / EF Core status: this compose file provisions a real SQL
+# Server container and each service is built with UseSqlServer=true (see
+# each service's Dockerfile build arg below), which enables the EF Core
+# code path — real, complete .cs files, not placeholders — instead of the
+# in-memory repositories. See Database/README.md for full verification
+# status per piece.
+#
+# EVENT BUS (2026): the four services below now default to a real Azure
+# Service Bus emulator (servicebus-emulator + its sqledge dependency,
+# below) instead of the HttpLoopbackEventBus — see Common/EventBus/
+# AzureServiceBusEventBus.cs and HttpLoopbackEventBus.cs's own header
+# comment for exactly why the old loopback bus's synchronous, nested HTTP
+# calls made trace-log causality misleading (an app's own
+# "event published" trace line was logged AFTER that event's entire
+# downstream cascade had already finished, because publishing blocked on
+# the receiver's response). Real pub/sub genuinely decouples publish from
+# processing. Set USE_SERVICE_BUS=false in your .env to fall back to the
+# old loopback bus instantly if anything here misbehaves — no code
+# changes needed, see each service's EventBus__UseServiceBus below.
+
+services:
+  sqlserver:
+    container_name: sqlserver
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      # Confirms SQL Server is actually accepting connections, not just
+      # that the container process started — the four services below
+      # depend_on this with condition: service_healthy, so they wait for
+      # a real, connectable database rather than racing it on startup and
+      # failing their own first connection attempt.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 180s
+    restart: unless-stopped
+
+  # --- Event bus: Azure Service Bus emulator + its SQL Edge dependency ---
+  # Official images/wiring per Microsoft's own docker-compose template
+  # (Azure/azure-service-bus-emulator-installer). sqledge is the
+  # emulator's OWN internal state store — separate from the "sqlserver"
+  # container above, which holds this platform's actual application data.
+  sqledge:
+    container_name: sqledge
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:-YourStrong!Passw0rd}
+    restart: unless-stopped
+
+  servicebus-emulator:
+    container_name: servicebus-emulator
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    pull_policy: always
+    volumes:
+      # Declares one topic ("loan-platform-events") with a filtered
+      # subscription per consuming service — see this file for the exact
+      # Correlation-filter rules mapped from the same EventSubscribers
+      # config the old loopback bus used.
+      - ./infra/servicebus-emulator/config.json:/ServiceBus_Emulator/ConfigFiles/Config.json
+    ports:
+      - "5672:5672" # AMQP — what ServiceBusClient actually connects on
+      - "5300:5300" # Management/health-check API only
+    environment:
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      ACCEPT_EULA: "Y"
+      SQL_WAIT_INTERVAL: "15"
+    depends_on:
+      - sqledge
+    # No healthcheck here deliberately — unlike the sqlserver healthcheck
+    # above (which uses sqlcmd, confirmed present in that specific image),
+    # this repo has never confirmed what's actually inside the emulator's
+    # image, and a healthcheck command that doesn't exist would mark this
+    # container permanently "unhealthy" and block every service below
+    # forever via depends_on's service_healthy condition. The four
+    # services instead rely on the Azure SDK's own built-in connection
+    # retry plus a short retry loop in ServiceBusEventReceiver — see that
+    # file — to tolerate the emulator still finishing its own SQL_WAIT
+    # startup sequence.
+    restart: unless-stopped
+
+  origination:
+    container_name: origination
+    build:
+      context: .
+      dockerfile: Services/OriginationService/Dockerfile
+      args:
+        USE_SQL_SERVER: "true"
+        # Set to "false" for a production build to strip per-application
+        # trace logging entirely at compile time — see
+        # Common/Logging/TraceLogger.cs.
+        TRACE_LOGGING: ${TRACE_LOGGING:-true}
+    ports:
+      - "5100:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      servicebus-emulator:
+        condition: service_started
+    environment:
+      Email__SmtpHost: ${SMTP_HOST:-host.docker.internal}
+      Email__SmtpPort: ${SMTP_PORT:-2525}
+      Email__From: loan-platform@example.com
+      Email__To: ${REVIEW_EMAIL:-}
+      # Kept as a fallback — only read when EventBus__UseServiceBus is
+      # false. Ignored otherwise.
+      EventSubscribers__ApplicationReadyForUnderwritingEvent__0: http://underwriting:8080
+      # Set USE_SERVICE_BUS=false in your .env to fall back to the old
+      # HTTP loopback bus above with no code changes.
+      EventBus__UseServiceBus: ${USE_SERVICE_BUS:-true}
+      EventBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      EventBus__TopicName: loan-platform-events
+      EventBus__SubscriptionName: origination
+      ConnectionStrings__OriginationDb: "Server=sqlserver,1433;Database=OriginationDb;User Id=sa;Password=${SQL_SA_PASSWORD:-YourStrong!Passw0rd};TrustServerCertificate=true"
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+  underwriting:
+    container_name: underwriting
+    build:
+      context: .
+      dockerfile: Services/UnderwritingService/Dockerfile
+      args:
+        USE_SQL_SERVER: "true"
+        TRACE_LOGGING: ${TRACE_LOGGING:-true}
+    ports:
+      - "5101:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      servicebus-emulator:
+        condition: service_started
+      # New: the underwriter co-pilot (Common/AI/ClaudeUnderwritingCopilotService.cs)
+      # makes a real synchronous HTTP call to Origination when someone
+      # requests a summary — see OriginationApiClient.cs. This is a soft
+      # startup-ordering hint, not a hard requirement: that call only
+      # happens on-demand, well after both containers are up, so it's
+      # fine even without condition: service_healthy here.
+      origination:
+        condition: service_started
+    environment:
+      Email__SmtpHost: ${SMTP_HOST:-host.docker.internal}
+      Email__SmtpPort: ${SMTP_PORT:-2525}
+      Email__From: loan-platform@example.com
+      Email__To: ${REVIEW_EMAIL:-}
+      # Kept as a fallback — only read when EventBus__UseServiceBus is false.
+      EventSubscribers__UnderwritingDecisionEvent__0: http://funding:8080
+      EventSubscribers__UnderwritingDecisionEvent__1: http://origination:8080
+      EventBus__UseServiceBus: ${USE_SERVICE_BUS:-true}
+      EventBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      EventBus__TopicName: loan-platform-events
+      EventBus__SubscriptionName: underwriting
+      ConnectionStrings__UnderwritingDb: "Server=sqlserver,1433;Database=UnderwritingDb;User Id=sa;Password=${SQL_SA_PASSWORD:-YourStrong!Passw0rd};TrustServerCertificate=true"
+      # Underwriter co-pilot (Common/AI/ClaudeUnderwritingCopilotService.cs)
+      # — Services__Origination lets this service make its one synchronous
+      # cross-service call (see OriginationApiClient.cs); Anthropic__ApiKey
+      # is the same key/account already used by Origination's document
+      # extraction feature, not a second one to provision.
+      Services__Origination: http://origination:8080
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+
+  funding:
+    container_name: funding
+    build:
+      context: .
+      dockerfile: Services/FundingService/Dockerfile
+      args:
+        USE_SQL_SERVER: "true"
+        TRACE_LOGGING: ${TRACE_LOGGING:-true}
+    ports:
+      - "5102:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      servicebus-emulator:
+        condition: service_started
+    environment:
+      Email__SmtpHost: ${SMTP_HOST:-host.docker.internal}
+      Email__SmtpPort: ${SMTP_PORT:-2525}
+      Email__From: loan-platform@example.com
+      Email__To: ${REVIEW_EMAIL:-}
+      # Kept as a fallback — only read when EventBus__UseServiceBus is false.
+      EventSubscribers__LoanFundedEvent__0: http://servicing:8080
+      # BUG FIX: Underwriting now also needs to hear about a loan being
+      # funded, so it can lock the decision that authorized it against a
+      # later re-evaluation overwriting it — see LoanFundedEventHandler in
+      # Services/UnderwritingService/EventHandlers.cs.
+      EventSubscribers__LoanFundedEvent__1: http://underwriting:8080
+      EventBus__UseServiceBus: ${USE_SERVICE_BUS:-true}
+      EventBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      EventBus__TopicName: loan-platform-events
+      EventBus__SubscriptionName: funding
+      ConnectionStrings__FundingDb: "Server=sqlserver,1433;Database=FundingDb;User Id=sa;Password=${SQL_SA_PASSWORD:-YourStrong!Passw0rd};TrustServerCertificate=true"
+    restart: unless-stopped
+
+  servicing:
+    container_name: servicing
+    build:
+      context: .
+      dockerfile: Services/ServicingService/Dockerfile
+      args:
+        USE_SQL_SERVER: "true"
+        TRACE_LOGGING: ${TRACE_LOGGING:-true}
+    ports:
+      - "5103:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      servicebus-emulator:
+        condition: service_started
+    environment:
+      Email__SmtpHost: ${SMTP_HOST:-host.docker.internal}
+      Email__SmtpPort: ${SMTP_PORT:-2525}
+      Email__From: loan-platform@example.com
+      Email__To: ${REVIEW_EMAIL:-}
+      EventBus__UseServiceBus: ${USE_SERVICE_BUS:-true}
+      EventBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+      EventBus__TopicName: loan-platform-events
+      EventBus__SubscriptionName: servicing
+      ConnectionStrings__ServicingDb: "Server=sqlserver,1433;Database=ServicingDb;User Id=sa;Password=${SQL_SA_PASSWORD:-YourStrong!Passw0rd};TrustServerCertificate=true"
+    restart: unless-stopped
+
+  # AZURE MIGRATION: new service — previously the MCP server only ran as a
+  # local stdio subprocess Claude Desktop launched directly (`dotnet run`),
+  # which is why it never needed an entry here before. Mcp__Transport below
+  # is what actually switches it into HTTP mode inside this container — see
+  # Services/McpServer/Program.cs's transport-selection comment at the top
+  # of that file. Local `dotnet run` outside Docker still defaults to stdio,
+  # untouched by any of this.
+  mcp-server:
+    container_name: mcp-server
+    build:
+      context: .
+      dockerfile: Services/McpServer/Dockerfile
+    ports:
+      - "5104:8080"
+    depends_on:
+      - origination
+      - underwriting
+      - funding
+      - servicing
+    environment:
+      Mcp__Transport: Http
+      # Shared secret an HTTP MCP client must send back as
+      # "Authorization: Bearer <this value>" — see Program.cs's
+      # RunHttpAsync for why a static shared secret, not Entra ID bearer
+      # validation, is the right fit for this specific boundary. The
+      # container refuses to start without it; there's no insecure default.
+      Mcp__ApiKey: ${MCP_API_KEY:-}
+      # Container DNS hostnames, not localhost — same distinction the file
+      # header comment above makes for the event bus.
+      Services__Origination: http://origination:8080
+      Services__Underwriting: http://underwriting:8080
+      Services__Funding: http://funding:8080
+      Services__Servicing: http://servicing:8080
+      # Used by AuthTools.Login's Entra ID client-credentials flow to call
+      # the four services above — see Services/McpServer/Tools/AuthTools.cs.
+      AzureAd__ClientSecret: ${AZURE_AD_CLIENT_SECRET:-}
+    restart: unless-stopped
+
+  ui:
+    container_name: ui
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - origination
+      - underwriting
+      - funding
+      - servicing
+    environment:
+      # Host-published ports, not container-internal DNS — the browser
+      # runs on your machine, outside Docker's network entirely, same
+      # reasoning as the file header comment above. docker-entrypoint.sh
+      # (inside the ui image) turns these into /config.json at startup.
+      ORIGINATION_URL: http://localhost:5100
+      UNDERWRITING_URL: http://localhost:5101
+      FUNDING_URL: http://localhost:5102
+      SERVICING_URL: http://localhost:5103
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:

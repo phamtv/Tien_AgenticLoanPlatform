@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Same pattern as Common/LoanPlatform.Common.csproj: a plain SDK
+       project with an explicit FrameworkReference, rather than
+       Microsoft.NET.Sdk.Web, since this is shared test infrastructure,
+       not a runnable web app itself. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\LoanPlatform.Common.csproj" />
+    <ProjectReference Include="..\..\Contracts\LoanPlatform.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

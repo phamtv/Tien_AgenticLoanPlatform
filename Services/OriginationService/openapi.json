@@ -1,0 +1,27 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Origination Service",
+    "version": "1.0.0",
+    "description": "Handles loan application intake, credit bureau pulls (Experian, TransUnion), and identity verification (LexisNexis, TrueID, Informed). Publishes ApplicationReadyForUnderwritingEvent."
+  },
+  "servers": [{ "url": "http://localhost:5100" }],
+  "paths": {
+    "/api/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "OK" } } } },
+    "/api/applications": {
+      "get": { "summary": "List all applications", "responses": { "200": { "description": "Array of applications" } } },
+      "post": { "summary": "Submit a new loan application (runs credit + identity checks, publishes event)", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/applications/{id}": {
+      "get": { "summary": "Get application by ID", "responses": { "200": { "description": "The application" }, "404": { "description": "Not found" } } },
+      "put": { "summary": "Update editable fields (before a decision is made)", "responses": { "200": { "description": "Updated" }, "409": { "description": "Already decided, no longer editable" } } }
+    },
+    "/api/applications/{id}/status": { "get": { "summary": "Lightweight status check", "responses": { "200": { "description": "Status only" } } } },
+    "/api/applications/{id}/documents": {
+      "get": { "summary": "List uploaded documents", "responses": { "200": { "description": "Array of documents" } } },
+      "post": { "summary": "Record document upload metadata", "responses": { "200": { "description": "Document recorded" } } }
+    },
+    "/api/applications/{id}/credit-check": { "post": { "summary": "Standalone credit re-pull, optional ?bureau= query", "responses": { "200": { "description": "Credit bureau result" } } } },
+    "/events/receive": { "post": { "summary": "Internal: receives UnderwritingDecisionEvent from the event bus", "responses": { "200": { "description": "OK" } } } }
+  }
+}

@@ -1,0 +1,199 @@
+name: Loan Platform CI/CD
+
+# Single entry point. On every push to main, figures out which service(s)
+# actually need rebuilding and calls build-service.yml only for those.
+#
+# This is NOT the simple "one folder = one independent project" pattern
+# used elsewhere — Contracts/ and Common/ are shared libraries every one
+# of the four original services depends on via ProjectReference. A change
+# there can require rebuilding all four, even if none of their own files
+# changed. So the logic here is dependency-aware:
+#
+#   - Contracts/** or Common/** changed   -> rebuild ALL FOUR original services
+#   - Services/OriginationService/** only -> rebuild ONLY OriginationService
+#   - (same per-service isolation for the other three)
+#
+# AZURE MIGRATION CHANGE: added McpServer and the Angular UI, previously
+# absent from CI entirely (a deliberate scope cut, per
+# Services/McpServer/README.md's "Not included here" section and this
+# file's own prior git history — not an oversight, just now in scope).
+#
+# McpServer.csproj has NO ProjectReference to Contracts/ or Common/ (it's
+# self-contained — HTTP calls to the other services plus its own MSAL
+# auth, nothing from the shared libraries), so it's deliberately NOT
+# rebuilt on "shared" changes the way the original four are — only on its
+# own path changing. Verify this stays true if McpServer ever grows a
+# dependency on Common/Contracts.
+#
+# The UI is a separate Node/Angular project, unrelated to the .NET shared
+# libraries, so it only rebuilds on its own path changing too.
+#
+# CD CHANGE (2026-09-14): every build-service.yml call now needs
+# `secrets: inherit` so the reusable workflow can see this repo's
+# AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID secrets — a
+# reusable workflow gets none of the caller's secrets by default. The UI
+# job (below, not routed through build-service.yml since it's not a
+# dotnet project) now deploys the same way directly, replacing the old
+# "push to ghcr.io and stop" behavior — see that job for detail.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  detect-changes:
+    name: Detect which project(s) changed
+    runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      origination: ${{ steps.filter.outputs.origination }}
+      underwriting: ${{ steps.filter.outputs.underwriting }}
+      funding: ${{ steps.filter.outputs.funding }}
+      servicing: ${{ steps.filter.outputs.servicing }}
+      mcpserver: ${{ steps.filter.outputs.mcpserver }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'Contracts/**'
+              - 'Common/**'
+            origination:
+              - 'Services/OriginationService/**'
+              - 'Tests/OriginationService.Tests/**'
+            underwriting:
+              - 'Services/UnderwritingService/**'
+              - 'Tests/UnderwritingService.Tests/**'
+            funding:
+              - 'Services/FundingService/**'
+              - 'Tests/FundingService.Tests/**'
+            servicing:
+              - 'Services/ServicingService/**'
+              - 'Tests/ServicingService.Tests/**'
+            mcpserver:
+              - 'Services/McpServer/**'
+            ui:
+              - 'ui/**'
+
+  build-origination:
+    name: Origination Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.origination == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: OriginationService
+    secrets: inherit
+
+  build-underwriting:
+    name: Underwriting Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.underwriting == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: UnderwritingService
+    secrets: inherit
+
+  build-funding:
+    name: Funding Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.funding == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: FundingService
+    secrets: inherit
+
+  build-servicing:
+    name: Servicing Service
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true' || needs.detect-changes.outputs.servicing == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: ServicingService
+    secrets: inherit
+
+  # AZURE MIGRATION: new job. Reuses build-service.yml unchanged — McpServer
+  # follows the same Services/<name>/<name>.csproj + Services/<name>/Dockerfile
+  # convention as the original four, so the reusable workflow needed no
+  # changes, just a new caller.
+  build-mcpserver:
+    name: MCP Server
+    needs: detect-changes
+    if: needs.detect-changes.outputs.mcpserver == 'true'
+    uses: ./.github/workflows/build-service.yml
+    with:
+      service_name: McpServer
+    secrets: inherit
+
+  # AZURE MIGRATION: new job. Not a call to build-service.yml — the UI is
+  # an Angular/Node project, not a dotnet one, so there's no
+  # "dotnet build"/"dotnet test" step to run. The Angular build itself
+  # happens inside ui/Dockerfile's build stage.
+  #
+  # CD CHANGE (2026-09-14): used to stop after pushing to ghcr.io. Now
+  # builds into the same ACR infra/deploy.ps1 uses and updates the live UI
+  # Container App, mirroring build-service.yml's deploy job (kept as
+  # plain steps here rather than factored out, since this is the only
+  # non-dotnet caller and the two would otherwise share almost nothing).
+  build-ui:
+    name: UI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for azure/login's OIDC federated credential exchange
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC — no stored client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve this environment's ACR
+        id: acr
+        run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          if [ -z "$RG" ]; then
+            echo "::error::AZURE_RESOURCE_GROUP repository variable is not set."
+            exit 1
+          fi
+          ACR_NAME=$(az acr list --resource-group "$RG" --query "[0].name" -o tsv)
+          if [ -z "$ACR_NAME" ]; then
+            echo "::error::No Azure Container Registry found in resource group $RG."
+            exit 1
+          fi
+          echo "acr_name=$ACR_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image (az acr build)
+        run: |
+          az acr build \
+            --registry "${{ steps.acr.outputs.acr_name }}" \
+            --image "loan-platform-ui:latest" \
+            --file "ui/Dockerfile" \
+            "ui"
+
+      - name: Update the UI Container App to the freshly built image
+        run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          ENV_NAME="${{ vars.AZURE_ENV_NAME }}"
+          if [ -z "$ENV_NAME" ]; then
+            ENV_NAME="dev"
+          fi
+
+          ACR_LOGIN_SERVER=$(az acr show --name "${{ steps.acr.outputs.acr_name }}" --query loginServer -o tsv)
+          APP_NAME="loanplat-ui-$ENV_NAME"
+          FULL_IMAGE="$ACR_LOGIN_SERVER/loan-platform-ui:latest"
+          REVISION_SUFFIX="deploy$(date -u +%Y%m%d%H%M%S)"
+
+          echo "-- $APP_NAME -> $FULL_IMAGE (revision suffix: $REVISION_SUFFIX) --"
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --image "$FULL_IMAGE" \
+            --revision-suffix "$REVISION_SUFFIX"

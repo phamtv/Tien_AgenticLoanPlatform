@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    UNVERIFIED — see README.md in this folder before relying on this project.
+    Written against the documented ModelContextProtocol C# SDK API and hand-checked
+    against this repo's real controllers (Origination/Underwriting/Funding/Servicing),
+    but never restored, compiled, or run: this sandbox has no dotnet SDK at all (not
+    just no NuGet access, which is the constraint the rest of this repo's SQL Server /
+    EF Core code hit). Treat every line here with more suspicion than the rest of the
+    codebase until you've built it yourself.
+
+    CONTAINER MIGRATION: switched from Microsoft.NET.Sdk to Microsoft.NET.Sdk.Web (the
+    same SDK every other service in this repo already uses) and added
+    ModelContextProtocol.AspNetCore, pinned to the exact same 2.2.0 release already used
+    for the stdio-only ModelContextProtocol package below — same publisher, same release
+    date on NuGet.org, so this is the version actually meant to pair with it, not a guess.
+    Dropped the previously-explicit Microsoft.Extensions.Hosting and Microsoft.Extensions.Http
+    package references: both ship as part of the Microsoft.AspNetCore.App shared framework
+    that Sdk.Web references implicitly (see OriginationService.csproj, which calls
+    AddHttpClient<T>() the same way with neither package listed) — keeping them here risked
+    a version mismatch against whatever the shared framework itself carries.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LoanPlatform.McpServer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Official Microsoft/Anthropic C# SDK for MCP — core (attributes, stdio transport)
+         plus AspNetCore (HTTP/streamable transport, added for the container deployment;
+         see Program.cs). Check for a newer 2.x release before you restore, since this SDK
+         has moved fast (see the .NET blog's v2.0 announcement: a stateless-first rewrite
+         of the HTTP transport layer). -->
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.89.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

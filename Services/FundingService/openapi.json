@@ -1,0 +1,17 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Funding Service", "version": "1.0.0", "description": "Subscribes to UnderwritingDecisionEvent (acts only on approvals), simulates verification and disbursement, and publishes LoanFundedEvent." },
+  "servers": [{ "url": "http://localhost:5102" }],
+  "paths": {
+    "/api/health": { "get": { "summary": "Health check", "responses": { "200": { "description": "OK" } } } },
+    "/api/fundings": {
+      "get": { "summary": "List all funding records", "responses": { "200": { "description": "Array of fundings" } } },
+      "post": { "summary": "Manually initiate funding outside the event flow", "responses": { "201": { "description": "Created" }, "409": { "description": "Already funded" } } }
+    },
+    "/api/fundings/{applicationId}": { "get": { "summary": "Get funding record for an application", "responses": { "200": { "description": "The funding record" }, "404": { "description": "Not funded" } } } },
+    "/api/fundings/{applicationId}/status": { "get": { "summary": "Lightweight status check", "responses": { "200": { "description": "Status only" } } } },
+    "/api/fundings/{applicationId}/verify": { "post": { "summary": "Simulated pre-disbursement identity/title re-verification (TrueID)", "responses": { "200": { "description": "Verification result" } } } },
+    "/api/fundings/{applicationId}/disburse": { "post": { "summary": "Alias for manual funding scoped to a specific application", "responses": { "201": { "description": "Created" } } } },
+    "/events/receive": { "post": { "summary": "Internal: receives UnderwritingDecisionEvent", "responses": { "200": { "description": "OK" } } } }
+  }
+}

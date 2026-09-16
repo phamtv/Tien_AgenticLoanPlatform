@@ -43,10 +43,11 @@ public class UnderwritingTools
             $"api/underwriting/{applicationId}/copilot-summary{(regenerate ? "?regenerate=true" : "")}");
 
     [McpServerTool, Description(
-        "Manually run the risk engine for an application, outside the normal automatic " +
-        "event-driven flow — useful for testing the risk engine directly, or a manual " +
-        "underwriter override. Publishes the exact same decision event Funding listens for, " +
-        "so an approved result here will still trigger downstream funding automatically.")]
+        "Run the risk engine for an application and record its underwriting decision — this " +
+        "is the ONLY way an application's decision gets made; this platform has no automatic " +
+        "event-driven processing. An Approved result does NOT automatically disburse funds — " +
+        "call fund_loan or disburse_loan explicitly afterward (typically after also calling " +
+        "verify_before_funding) to actually fund an approved application.")]
     public Task<ApiResult> EvaluateApplication(
         string applicationId,
         string customerId,

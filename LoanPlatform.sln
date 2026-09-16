@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServicingService", "Service
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McpServer", "Services\McpServer\McpServer.csproj", "{FBDB9C8B-0F57-F34A-0523-02CC9351F469}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrchestratorService", "Services\OrchestratorService\OrchestratorService.csproj", "{F5255230-89D8-4023-AF87-34EABD790B33}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -53,6 +55,10 @@ Global
 		{FBDB9C8B-0F57-F34A-0523-02CC9351F469}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FBDB9C8B-0F57-F34A-0523-02CC9351F469}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FBDB9C8B-0F57-F34A-0523-02CC9351F469}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F5255230-89D8-4023-AF87-34EABD790B33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F5255230-89D8-4023-AF87-34EABD790B33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F5255230-89D8-4023-AF87-34EABD790B33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F5255230-89D8-4023-AF87-34EABD790B33}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -63,6 +69,7 @@ Global
 		{E932A2EA-18AB-45D7-B682-DE0D2ED7D4A3} = {98D2ADB2-A8DB-4B2D-AB23-1BA562CB7B12}
 		{6E2606BB-39DF-48FA-A8FB-44F4732D2841} = {98D2ADB2-A8DB-4B2D-AB23-1BA562CB7B12}
 		{FBDB9C8B-0F57-F34A-0523-02CC9351F469} = {98D2ADB2-A8DB-4B2D-AB23-1BA562CB7B12}
+		{F5255230-89D8-4023-AF87-34EABD790B33} = {98D2ADB2-A8DB-4B2D-AB23-1BA562CB7B12}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AB14C007-D03A-461F-BD32-DDDD7C88C870}

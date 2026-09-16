@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    UNVERIFIED — same caveat McpServer.csproj already carries in this repo,
+    and for the same reason: this was written against the documented
+    Anthropic C# SDK and ModelContextProtocol C# SDK client APIs, hand-checked
+    against Services/McpServer's own already-working use of ModelContextProtocol,
+    but never restored, compiled, or run — this sandbox has no dotnet SDK
+    access to do that. Treat every line here with more suspicion than the
+    rest of the codebase until you've built it yourself and fixed whatever
+    the compiler flags (package versions and exact Microsoft.Extensions.AI /
+    Anthropic SDK member names are the most likely things to need a small
+    correction — both SDKs are moving fast).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LoanPlatform.Orchestrator</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same MCP client/server SDK McpServer.csproj uses, pinned to the same
+         2.2.0 release for consistency — this project is an MCP *client*
+         (McpClient.CreateAsync, HttpClientTransport) rather than a server,
+         but both roles live in this one package (ModelContextProtocol.Core
+         comes in transitively, same as it does for McpServer). Check for a
+         newer 2.x release before you restore. -->
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+
+    <!-- Official Anthropic C# SDK (NuGet package literally named "Anthropic",
+         not the older community "Anthropic.SDK" package — see
+         github.com/anthropics/anthropic-sdk-csharp). Verify this is still
+         the latest 12.x before restoring. -->
+    <PackageReference Include="Anthropic" Version="12.9.0" />
+
+    <!-- Microsoft.Extensions.AI: the concrete IChatClient pipeline
+         (ChatClientBuilder, UseFunctionInvocation()) that AnthropicClient's
+         AsIChatClient() plugs into, and that McpClientTool (from
+         ModelContextProtocol above) plugs into as an AIFunction. Abstractions
+         comes in transitively via both packages above, but referencing it
+         explicitly too avoids relying on that.
+         BUILD FIX: originally pinned to 9.4.0, bumped to 10.2.0 because
+         Anthropic 12.9.0 requires Microsoft.Extensions.AI.Abstractions >=
+         10.2.0 — then bumped again to 10.8.3 because ModelContextProtocol
+         2.2.0's own dependency, ModelContextProtocol.Core 2.2.0, requires
+         >= 10.8.3, which is a stricter floor than Anthropic's. Whichever
+         transitive dependency has the highest floor wins here, so if a
+         future package bump reintroduces this NU1605 error, read the
+         "Detected package downgrade" message for the new required version
+         and bump both packages below to at least that. -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
+
+    <!-- Config binding for appsettings.json + the same ASP.NET-style
+         Foo__Bar env var override convention the rest of this repo uses —
+         this project isn't Sdk.Web, so these aren't pulled in implicitly
+         the way they are for the four business services. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -61,9 +61,12 @@ public class OriginationTools
 
     [McpServerTool, Description(
         "Submit a brand-new auto loan application. This immediately runs a live-simulated " +
-        "credit check and identity check, then publishes an event that automatically notifies " +
-        "Underwriting — no separate 'send to underwriting' step is needed. Returns the new " +
-        "ApplicationId along with the credit and identity check results.")]
+        "credit check and identity check and sets the application's status to " +
+        "UnderwritingInProgress, but does NOT automatically advance it any further — this " +
+        "platform has no automatic event-driven processing. Call evaluate_application " +
+        "afterward, using the credit score and other figures returned here, to actually run " +
+        "underwriting. Returns the new ApplicationId along with the credit and identity check " +
+        "results.")]
     public Task<ApiResult> SubmitApplication(
         string customerId,
         // Applicant

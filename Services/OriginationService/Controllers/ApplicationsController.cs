@@ -237,50 +237,30 @@ public class ApplicationsController : ControllerBase
             SubmittedAt: DateTimeOffset.UtcNow
         ));
 
-        // BUG FIX (2026-09-14): this used to run AFTER the event publish
-        // below. _eventBus.PublishAsync (HttpLoopbackEventBus) makes a real,
-        // awaited HTTP call straight into Underwriting's /events/receive —
-        // and Underwriting's own risk evaluation has no artificial vendor
-        // delay, so by the time that await returns, UnderwritingDecisionEvent
-        // has very likely already round-tripped all the way back to THIS
-        // service's own UnderwritingDecisionEventHandler (see this file,
-        // below) and already written "Approved"/"Denied" for this exact
-        // applicationId. The old ordering then unconditionally overwrote
-        // that with "UnderwritingInProgress" right after, clobbering the
-        // real decision back to "in progress" on effectively every
-        // submission — this is what was making every application's status
-        // look permanently stuck, regardless of its real, correctly-computed
-        // underwriting outcome (confirmed via GetDecision/list_fundings
-        // while diagnosing this). Moving this update to before the publish
-        // fixes the race entirely: "UnderwritingInProgress" is now only ever
-        // the true, momentary pre-decision state, and whichever status the
-        // decision handler (or, if approved, funding) writes afterward is
-        // the one that sticks.
+        // AGENTIC MIGRATION (removed auto-processing event): this used to
+        // publish ApplicationReadyForUnderwritingEvent here, which
+        // Underwriting's ApplicationReadyEventHandler picked up automatically
+        // to run the risk engine with no external decision in between. That
+        // auto-advance is exactly what's being replaced by an orchestrator —
+        // this method now stops at "UnderwritingInProgress" and leaves the
+        // application there. Underwriting.Evaluate (POST
+        // /api/underwriting/{id}/evaluate — the same endpoint the MCP
+        // server's evaluate_application tool calls, and the same RiskEngine
+        // + UnderwritingDecisionEvent publish the old handler used) is now
+        // the only thing that moves an application past this point, and it's
+        // only ever called explicitly — by the orchestrator or a human —
+        // never automatically from here.
+        //
+        // ApplicationReadyForUnderwritingEvent, ApplicationReadyEventHandler,
+        // and their registration in UnderwritingService/Program.cs are left
+        // in place but are now unreachable dead code, since nothing publishes
+        // that event type anymore — safe to delete in a later cleanup pass.
         _repository.UpdateStatus(applicationId, "UnderwritingInProgress");
-        _logger.Trace(applicationId, "Status.Set", "Status set to UnderwritingInProgress, about to publish ApplicationReadyForUnderwritingEvent");
-
-        await _eventBus.PublishAsync(new ApplicationReadyForUnderwritingEvent
-        {
-            ApplicationId = applicationId,
-            CustomerId = request.CustomerId,
-            ApplicantName = fullName,
-            RequestedAmount = request.RequestedAmount,
-            TermMonths = request.TermMonths,
-            Channel = request.Channel,
-            DealerName = request.DealerName,
-            MonthlyIncome = request.Employment.MonthlyIncome,
-            ExistingMonthlyDebt = creditResult.TotalMonthlyDebtPayments,
-            VehicleValue = request.Vehicle.SalePrice,
-            CreditScore = creditResult.CreditScore,
-            CreditBureauUsed = creditResult.BureauName,
-            IdentityConfirmed = identityResult.IdentityConfirmed,
-            IdentityProviderUsed = identityResult.ProviderName,
-        });
-        _logger.Trace(applicationId, "Submit.EventPublished", "ApplicationReadyForUnderwritingEvent published");
+        _logger.Trace(applicationId, "Status.Set", "Status set to UnderwritingInProgress — awaiting an explicit call to Underwriting's evaluate endpoint (auto-publish removed)");
 
         await _emailService.SendAsync(
             $"Loan Application Submitted — {applicationId}",
-            $"A new loan application has been submitted and is now in underwriting.\n\n" +
+            $"A new loan application has been submitted and is awaiting underwriting review.\n\n" +
             $"Application ID: {applicationId}\n" +
             $"Applicant: {fullName} ({request.CustomerId})\n" +
             $"Employer: {request.Employment.EmployerName}, monthly income ${request.Employment.MonthlyIncome:N2}\n" +

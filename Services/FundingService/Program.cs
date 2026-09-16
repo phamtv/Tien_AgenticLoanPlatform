@@ -59,6 +59,12 @@ if (builder.Configuration.GetValue<bool>("EventBus:UseServiceBus"))
 {
     builder.Services.AddSingleton(sp => AzureServiceBusEventBus.BuildClient(sp.GetRequiredService<IConfiguration>()));
     builder.Services.AddSingleton<IEventBus, AzureServiceBusEventBus>();
+    // Kept running deliberately (see AGENTIC MIGRATION note below) — with
+    // the emulator, this service's subscription still receives every
+    // UnderwritingDecisionEvent Origination publishes (for its own
+    // status-sync bookkeeping), and something has to keep pulling and
+    // completing those messages or they'd sit unacknowledged in the
+    // subscription indefinitely rather than just being harmlessly ignored.
     builder.Services.AddHostedService<ServiceBusEventReceiver>();
 }
 else
@@ -71,7 +77,23 @@ builder.Services.AddSingleton<EventDispatcher>(sp =>
     dispatcher.RegisterEventType<UnderwritingDecisionEvent>();
     return dispatcher;
 });
-builder.Services.AddScoped<IEventHandler<UnderwritingDecisionEvent>, UnderwritingDecisionEventHandler>();
+// AGENTIC MIGRATION (removed auto-processing event): this used to also
+// register IEventHandler<UnderwritingDecisionEvent> here, which made an
+// approval auto-disburse the instant Underwriting's decision event arrived
+// — no external decision in between. That's exactly the auto-advance being
+// replaced by an orchestrator, so the handler registration is removed.
+// UnderwritingDecisionEvent is still received (dispatcher above still
+// recognizes the type, and the receiver above still runs) so messages get
+// acknowledged normally — EventDispatcher.DispatchAsync just logs "no
+// IEventHandler wired up" and returns, taking no action. Disbursement now
+// only happens via this service's own POST /api/fundings (or
+// .../{id}/disburse) — the same endpoint FundingsController.ManualFund
+// already exposed and the MCP server's fund_loan/disburse_loan tools
+// already call, invoked explicitly by the orchestrator or a human.
+//
+// UnderwritingDecisionEventHandler (EventHandlers.cs) is left in place but
+// is now unreachable dead code, since it's no longer registered with the
+// container — safe to delete in a later cleanup pass.
 
 var app = builder.Build();
 

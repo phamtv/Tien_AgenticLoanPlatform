@@ -14,25 +14,25 @@ public class FundingTools
 
     public FundingTools(LoanPlatformApiClient client) => _client = client;
 
-    [McpServerTool, Description("List every funded loan.")]
+    [McpServerTool(Name = "list_fundings"), Description("List every funded loan.")]
     public Task<ApiResult> ListFundings() =>
         _client.GetAsync(LoanPlatformService.Funding, "api/fundings");
 
-    [McpServerTool, Description("Get the funding record for a specific application, if it has been funded.")]
+    [McpServerTool(Name = "get_funding"), Description("Get the funding record for a specific application, if it has been funded.")]
     public Task<ApiResult> GetFunding(string applicationId) =>
         _client.GetAsync(LoanPlatformService.Funding, $"api/fundings/{applicationId}");
 
-    [McpServerTool, Description("Lightweight funded/not-funded status check for an application, without the full funding record.")]
+    [McpServerTool(Name = "get_funding_status"), Description("Lightweight funded/not-funded status check for an application, without the full funding record.")]
     public Task<ApiResult> GetFundingStatus(string applicationId) =>
         _client.GetAsync(LoanPlatformService.Funding, $"api/fundings/{applicationId}/status");
 
-    [McpServerTool, Description(
+    [McpServerTool(Name = "verify_before_funding"), Description(
         "Simulate the pre-disbursement identity/title re-verification step for an application " +
         "(a TrueID re-check immediately before funds are released).")]
     public Task<ApiResult> VerifyBeforeFunding(string applicationId) =>
         _client.PostAsync(LoanPlatformService.Funding, $"api/fundings/{applicationId}/verify", new { applicationId });
 
-    [McpServerTool, Description(
+    [McpServerTool(Name = "fund_loan"), Description(
         "Manually disburse a loan for an approved application, outside the normal " +
         "event-driven flow. Fails with a conflict if this application has already been funded.")]
     public Task<ApiResult> FundLoan(
@@ -47,7 +47,7 @@ public class FundingTools
             disbursementMethod,
         });
 
-    [McpServerTool, Description(
+    [McpServerTool(Name = "disburse_loan"), Description(
         "Identical to FundLoan, but calls the .../disburse alias route on the funding service " +
         "instead of the base POST — same underlying operation, exposed here in case a workflow " +
         "or reference doc specifically expects the disburse verb.")]

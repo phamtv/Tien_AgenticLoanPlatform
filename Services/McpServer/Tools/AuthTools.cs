@@ -37,7 +37,7 @@ public class AuthTools
         _config = config;
     }
 
-    [McpServerTool, Description(
+    [McpServerTool(Name = "login"), Description(
         "Log in to the loan platform. Call this before any other tool — every business " +
         "endpoint across all four services requires a Bearer token issued by this platform's " +
         "Microsoft Entra ID tenant. Acquires an app-only token via client credentials; no " +
@@ -92,6 +92,6 @@ public class AuthTools
         }
     }
 
-    [McpServerTool, Description("Check whether this MCP server currently holds a stored Entra ID token.")]
+    [McpServerTool(Name = "auth_status"), Description("Check whether this MCP server currently holds a stored Entra ID token.")]
     public object AuthStatus() => new { authenticated = _tokenStore.IsAuthenticated, identity = _tokenStore.Username };
 }

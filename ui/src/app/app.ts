@@ -89,9 +89,25 @@ interface ApplicationRow {
   decision: UnderwritingDecision | null;
   funding: Funding | null;
   loan: Loan | null;
+  // Status-only fallback, populated only when the full funding/loan record
+  // above is null because the role's token doesn't carry access to the
+  // full record (see fundingStatusOnly/loanStatusOnly and
+  // loadFundingStatuses()/loadLoanStatuses() below). Lets a restricted
+  // role's stepper/tiles show the real status ("Funded", "Active") instead
+  // of just "Restricted", without exposing the fields that endpoint
+  // deliberately doesn't return.
+  fundingStatus: StatusOnly | null;
+  loanStatus: StatusOnly | null;
 }
 
-type StageStatus = 'done' | 'current' | 'denied' | 'blocked' | 'pending';
+/** Shape returned by the narrow *.ViewFundingStatus / *.ViewLoanStatus endpoints — status and (if applicable) the loanId, nothing financial. */
+interface StatusOnly {
+  applicationId: string;
+  status: string;
+  loanId?: string;
+}
+
+type StageStatus = 'done' | 'current' | 'denied' | 'blocked' | 'pending' | 'restricted';
 
 // AZURE MIGRATION CHANGE: SERVICE_URLS used to be hardcoded here as
 // localhost:5100-5103, which only worked because the browser and the
@@ -121,6 +137,7 @@ export class App {
   console.log('[auth] handleRedirectPromise result:', redirectResult);
   if (redirectResult) {
     this.token = redirectResult.accessToken;
+    this.currentUser.set(this.decodeTokenClaims(this.token));
     console.log('[auth] token set from redirect, length:', this.token.length);
     await this.refreshAll();
     this.cdr.detectChanges()
@@ -138,6 +155,7 @@ export class App {
       account: accounts[0],
     });
     this.token = result.accessToken;
+    this.currentUser.set(this.decodeTokenClaims(this.token));
     console.log('[auth] silent token acquired, length:', this.token.length);
     await this.refreshAll();
   } catch (e) {
@@ -150,12 +168,98 @@ export class App {
   authError = signal('');
   authLoading = signal(false);
 
+  // Who's actually signed in right now, and what roles their token
+  // carries — display-only, read straight out of the access token we
+  // already have. This is NOT a security check (the real enforcement is
+  // server-side, via LoanPlatformPolicies on each of the four services);
+  // it exists purely so the header can show "Signed in as Trenton
+  // (LoanOfficer)" instead of leaving you to guess which test account is
+  // currently active, which matters a lot once you're switching between
+  // several role-scoped test users on the same machine.
+  currentUser = signal<{ name: string; roles: string[] } | null>(null);
+
+  /**
+   * True when the signed-in user's token carries at least one of the given
+   * roles — the client-side mirror of an [Authorize(Policy = ...)] role
+   * list on the backend (see Common/Auth/LoanPlatformPolicies.cs), used to
+   * hide or disable an action the current role will always get a 403 on
+   * (submitting an application, running the underwriter co-pilot, etc.)
+   * instead of showing a button that's guaranteed to fail.
+   *
+   * NOT a security boundary — same caveat as decodeTokenClaims() above,
+   * this only controls what's shown, not what's allowed. If this list
+   * drifts out of sync with a policy's actual role list, the worst case is
+   * a button that's wrongly shown (and then 403s, same as before this
+   * existed) or wrongly hidden (and the role has to be granted via Entra
+   * ID either way) — the real enforcement never depends on this.
+   */
+  hasAnyRole(...roles: string[]): boolean {
+    const mine = this.currentUser()?.roles ?? [];
+    return roles.some((r) => mine.includes(r));
+  }
+
+  // Tracks, per pipeline area, whether the LAST load attempt came back 403
+  // rather than genuinely having no data — set from loadFundings(),
+  // loadLoans(), and loadAllDecisions() below. Without this, a role that
+  // can't see Funding/Servicing (Loan Officer, say) looked identical to
+  // "nothing has been funded yet": both rendered as an empty/zero stage.
+  // See stageStatus() and the pipeline-summary tiles in app.html for where
+  // this actually changes what's shown.
+  accessRestricted = signal<{ underwriting: boolean; funding: boolean; servicing: boolean }>({
+    underwriting: false,
+    funding: false,
+    servicing: false,
+  });
+
+  // Status-only fallback data, keyed by applicationId. Populated by
+  // loadFundingStatuses()/loadLoanStatuses() — called from refreshAll()
+  // only when the full list above came back 403 — via the narrow
+  // Funding.ViewFundingStatus / Servicing.ViewLoanStatus endpoints, which a
+  // role like Loan Officer has even without Funding.ViewFunding /
+  // Servicing.ViewLoans. An applicationId present here (regardless of
+  // status value) means the status call itself succeeded; if it's still
+  // missing after the fallback ran, that role has no visibility into this
+  // stage at all, and stageStatus()/the summary tiles fall back to
+  // 'restricted'.
+  fundingStatusOnly = signal<Record<string, StatusOnly>>({});
+  loanStatusOnly = signal<Record<string, StatusOnly>>({});
+
   get isLoggedIn(): boolean {
     return !!this.token;
   }
 
   private authHeaders() {
     return { headers: { Authorization: `Bearer ${this.token}` } };
+  }
+
+  /**
+   * Decodes the access token's payload segment client-side (base64url,
+   * no signature verification — deliberately: we're just reading claims
+   * out of a token Azure AD handed straight to us a moment ago, not
+   * trusting an unverified token from somewhere else) to pull out a
+   * display name and the "roles" claim Microsoft.Identity.Web reads
+   * server-side for [Authorize(Policy = ...)]. Falls back gracefully if
+   * the token shape is ever unexpected, since this only feeds the UI, not
+   * an access decision.
+   */
+  private decodeTokenClaims(token: string): { name: string; roles: string[] } {
+    try {
+      const payload = token.split('.')[1];
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+          .join('')
+      );
+      const claims = JSON.parse(json);
+      return {
+        name: claims.name || claims.preferred_username || claims.upn || 'Signed in',
+        roles: Array.isArray(claims.roles) ? claims.roles : [],
+      };
+    } catch {
+      return { name: 'Signed in', roles: [] };
+    }
   }
 
   async login() {
@@ -170,7 +274,15 @@ export class App {
       // This call navigates away; nothing after it in this method runs
       // until the browser comes back and restoreSession() picks up the
       // result via handleRedirectPromise() above.
-      await msalInstance.loginRedirect({ scopes: [API_SCOPE] });
+      //
+      // prompt: 'select_account' forces Azure AD to always show the
+      // account picker, instead of silently completing seamless SSO with
+      // whatever Microsoft account the OS/browser already has signed in
+      // (Windows' own single sign-on will otherwise hand back the same
+      // account every time with no prompt at all, which makes it
+      // impossible to switch between test users like Trenton/Taylor/Tam/
+      // Tien from the same machine without this).
+      await msalInstance.loginRedirect({ scopes: [API_SCOPE], prompt: 'select_account' });
     } catch (e: any) {
       this.authError.set(e?.errorMessage || e?.message || 'Sign-in failed.');
       this.authLoading.set(false);
@@ -179,6 +291,7 @@ export class App {
 
   async logout() {
     this.token = '';
+    this.currentUser.set(null);
     this.stopLogsPolling();
     const account = msalInstance.getAllAccounts()[0];
     if (account) {
@@ -199,6 +312,7 @@ export class App {
     try {
       const result = await msalInstance.acquireTokenSilent({ scopes: [API_SCOPE], account });
       this.token = result.accessToken;
+      this.currentUser.set(this.decodeTokenClaims(this.token));
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
         // Needs a real sign-in prompt — handled by handleAuthFailure()
@@ -403,12 +517,23 @@ export class App {
   }
 
   private updateApplicationRows(): void {
-    this._applicationRows = this.applications.map((application) => ({
-      application,
-      decision: this.decisions.find((d) => d.applicationId === application.applicationId) ?? null,
-      funding: this.fundings.find((f) => f.applicationId === application.applicationId) ?? null,
-      loan: this.loans.find((l) => l.applicationId === application.applicationId) ?? null,
-    }));
+    const fundingStatus = this.fundingStatusOnly();
+    const loanStatus = this.loanStatusOnly();
+    this._applicationRows = this.applications.map((application) => {
+      const funding = this.fundings.find((f) => f.applicationId === application.applicationId) ?? null;
+      const loan = this.loans.find((l) => l.applicationId === application.applicationId) ?? null;
+      return {
+        application,
+        decision: this.decisions.find((d) => d.applicationId === application.applicationId) ?? null,
+        funding,
+        loan,
+        // Only fall back to the status-only map when we don't already have
+        // the full record — a role with real Funding/Servicing access
+        // never needed the narrow endpoint in the first place.
+        fundingStatus: funding ? null : fundingStatus[application.applicationId] ?? null,
+        loanStatus: loan ? null : loanStatus[application.applicationId] ?? null,
+      };
+    });
   }
 
   get approvedCount(): number {
@@ -419,6 +544,28 @@ export class App {
     return this.decisions.filter((d) => !d.approved).length;
   }
 
+  /** Full funding records plus anything we only know the status of — see fundingStatus on ApplicationRow. Backs the "Funded" summary tile. */
+  get fundedCount(): number {
+    const statusOnlyFunded = Object.values(this.fundingStatusOnly()).filter((s) => s.status === 'Funded').length;
+    return this.fundings.length + statusOnlyFunded;
+  }
+
+  /** Full loan records plus anything we only know the status of — see loanStatus on ApplicationRow. Backs the "Active Loans" summary tile. */
+  get activeLoanCount(): number {
+    const statusOnlyStarted = Object.values(this.loanStatusOnly()).filter((s) => s.status !== 'NotStarted').length;
+    return this.loans.length + statusOnlyStarted;
+  }
+
+  /** True only when the full list AND the status-only fallback both came back restricted — i.e. this role has no Funding visibility at all, not even status. */
+  get fundingFullyRestricted(): boolean {
+    return this.accessRestricted().funding && Object.keys(this.fundingStatusOnly()).length === 0;
+  }
+
+  /** Same as fundingFullyRestricted, for Servicing. */
+  get servicingFullyRestricted(): boolean {
+    return this.accessRestricted().servicing && Object.keys(this.loanStatusOnly()).length === 0;
+  }
+
   /**
    * Status for one stage (0=Submitted, 1=Underwriting, 2=Funding,
    * 3=Servicing) of one application's stepper. 'blocked' means a denial
@@ -427,22 +574,40 @@ export class App {
    */
   stageStatus(row: ApplicationRow, stage: number): StageStatus {
     const denied = row.decision != null && !row.decision.approved;
+    const restricted = this.accessRestricted();
     switch (stage) {
       case 0:
         return 'done'; // the row only exists because the application was submitted
       case 1:
-        if (row.decision == null) return 'current';
+        if (row.decision == null) return restricted.underwriting ? 'restricted' : 'current';
         return row.decision.approved ? 'done' : 'denied';
       case 2:
         if (denied) return 'blocked';
         if (row.funding != null) return 'done';
+        // Status-only fallback: we don't have the full record, but the
+        // narrow status endpoint told us whether it's funded, so show the
+        // real answer instead of 'restricted'.
+        if (row.fundingStatus) return row.fundingStatus.status === 'Funded' ? 'done' : (row.decision?.approved ? 'current' : 'pending');
+        if (restricted.funding) return 'restricted';
         return row.decision?.approved ? 'current' : 'pending';
       case 3:
       default:
         if (denied) return 'blocked';
         if (row.loan != null) return 'done';
+        if (row.loanStatus) {
+          if (row.loanStatus.status !== 'NotStarted') return 'done';
+          return (row.funding != null || row.fundingStatus?.status === 'Funded') ? 'current' : 'pending';
+        }
+        if (restricted.servicing) return 'restricted';
         return row.funding != null ? 'current' : 'pending';
     }
+  }
+
+  /** True when a stage's status came from the narrow status-only fallback rather than the full record — used only for the stepper's tooltip, so it's honest about what it actually knows. */
+  stageIsStatusOnly(row: ApplicationRow, stage: number): boolean {
+    if (stage === 2) return row.funding == null && row.fundingStatus != null;
+    if (stage === 3) return row.loan == null && row.loanStatus != null;
+    return false;
   }
 
   async refreshAll() {
@@ -456,7 +621,12 @@ export class App {
     await this.loadFundings();
     await this.loadLoans();
     await this.loadAllDecisions();
-    // Recompute the cached joined rows once, now that all four loads have
+    // Only fall back to the narrow status-only endpoints when the full
+    // list actually came back 403 — a role with real access never needs
+    // the per-application fallback calls below.
+    if (this.accessRestricted().funding) await this.loadFundingStatuses();
+    if (this.accessRestricted().servicing) await this.loadLoanStatuses();
+    // Recompute the cached joined rows once, now that all loads have
     // finished — see updateApplicationRows() for why this replaced the old
     // per-render getter.
     this.updateApplicationRows();
@@ -476,6 +646,7 @@ export class App {
   private handleAuthFailure(e: any) {
     if (e?.status === 401) {
       this.token = '';
+      this.currentUser.set(null);
       this.error.set('Session expired. Please sign in again.');
     }
   }
@@ -498,8 +669,13 @@ export class App {
       this.fundings = await firstValueFrom(
         this.http.get<Funding[]>(`${SERVICE_URLS.funding}/api/fundings`, this.authHeaders())
       );
-    } catch (e) {
+      this.accessRestricted.update((r) => ({ ...r, funding: false }));
+    } catch (e: any) {
       this.fundings = [];
+      // 403 means "your role can't see this," not "nothing's funded" —
+      // tracked separately so the UI can tell the two apart (see
+      // accessRestricted's own comment and stageStatus() above).
+      this.accessRestricted.update((r) => ({ ...r, funding: e?.status === 403 }));
       this.handleAuthFailure(e);
     }
   }
@@ -510,19 +686,74 @@ export class App {
       this.loans = await firstValueFrom(
         this.http.get<Loan[]>(`${SERVICE_URLS.servicing}/api/loans`, this.authHeaders())
       );
-    } catch (e) {
+      this.accessRestricted.update((r) => ({ ...r, servicing: false }));
+    } catch (e: any) {
       this.loans = [];
+      this.accessRestricted.update((r) => ({ ...r, servicing: e?.status === 403 }));
       this.handleAuthFailure(e);
     }
   }
 
-  private async loadDecisionFor(applicationId: string): Promise<UnderwritingDecision | null> {
+  /**
+   * Fallback for a role that can't see full Funding records (403 on
+   * loadFundings()) but does carry Funding.ViewFundingStatus — one call
+   * per application to the lightweight .../status endpoint, so the
+   * dashboard can still show "Funded" instead of just "Restricted". Only
+   * called from refreshAll() when loadFundings() actually came back 403;
+   * a role with full access never runs this. A per-application 403 here
+   * (role has neither policy) is expected and just leaves that
+   * application out of the map — see fundingFullyRestricted.
+   */
+  private async loadFundingStatuses() {
+    if (!this.token || this.applications.length === 0) return;
+    const results = await Promise.all(
+      this.applications.map(async (a) => {
+        try {
+          const status = await firstValueFrom(
+            this.http.get<StatusOnly>(`${SERVICE_URLS.funding}/api/fundings/${a.applicationId}/status`, this.authHeaders())
+          );
+          return status;
+        } catch {
+          return null;
+        }
+      })
+    );
+    const map: Record<string, StatusOnly> = {};
+    for (const s of results) if (s) map[s.applicationId] = s;
+    this.fundingStatusOnly.set(map);
+  }
+
+  /** Same as loadFundingStatuses(), for Servicing's applicationId-keyed status endpoint. */
+  private async loadLoanStatuses() {
+    if (!this.token || this.applications.length === 0) return;
+    const results = await Promise.all(
+      this.applications.map(async (a) => {
+        try {
+          const status = await firstValueFrom(
+            this.http.get<StatusOnly>(`${SERVICE_URLS.servicing}/api/loans/by-application/${a.applicationId}/status`, this.authHeaders())
+          );
+          return status;
+        } catch {
+          return null;
+        }
+      })
+    );
+    const map: Record<string, StatusOnly> = {};
+    for (const s of results) if (s) map[s.applicationId] = s;
+    this.loanStatusOnly.set(map);
+  }
+
+  private async loadDecisionFor(applicationId: string): Promise<{ decision: UnderwritingDecision | null; restricted: boolean }> {
     try {
-      return await firstValueFrom(
+      const decision = await firstValueFrom(
         this.http.get<UnderwritingDecision>(`${SERVICE_URLS.underwriting}/api/underwriting/${applicationId}/decision`, this.authHeaders())
       );
-    } catch {
-      return null;
+      return { decision, restricted: false };
+    } catch (e: any) {
+      // 404 ("no decision yet") and 403 ("can't see this") both land here
+      // as a null decision — restricted distinguishes which one it was,
+      // for loadAllDecisions() to aggregate below.
+      return { decision: null, restricted: e?.status === 403 };
     }
   }
 
@@ -606,7 +837,8 @@ export class App {
     const results = await Promise.all(
       this.applications.map((a) => this.loadDecisionFor(a.applicationId))
     );
-    this.decisions = results.filter((d): d is UnderwritingDecision => d !== null);
+    this.decisions = results.map((r) => r.decision).filter((d): d is UnderwritingDecision => d !== null);
+    this.accessRestricted.update((r) => ({ ...r, underwriting: results.some((x) => x.restricted) }));
   }
 
   // --- Document extraction (Claude) state ---

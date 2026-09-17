@@ -34,17 +34,40 @@ public class LoansController : ControllerBase
     /// the two concerns separate rather than fake a shortcut.
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoans)]
     public IActionResult GetAll() => Ok(_repository.GetAllLoans());
 
     [HttpGet("{loanId}")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoans)]
     public IActionResult GetById(string loanId)
     {
         var loan = _repository.GetLoan(loanId);
         return loan is null ? NotFound() : Ok(loan);
     }
 
+    /// <summary>
+    /// Lightweight status check keyed by applicationId (not loanId — the
+    /// caller doesn't necessarily know the loan's internal ID, only which
+    /// application it came from, mirroring FundingsController.GetStatus).
+    /// Gated by the narrower ServicingViewLoanStatus policy: returns just
+    /// the loan's status (Active/Delinquent/PaidOff) and its LoanId, none
+    /// of the balance, payment, or schedule detail the full endpoints
+    /// expose, so roles like Loan Officer that don't own Servicing's
+    /// records can still see where a loan stands.
+    /// </summary>
+    [HttpGet("by-application/{applicationId}/status")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoanStatus)]
+    public IActionResult GetStatusByApplication(string applicationId)
+    {
+        var loan = _repository.GetLoanByApplicationId(applicationId);
+        return loan is null
+            ? Ok(new { applicationId, status = "NotStarted" })
+            : Ok(new { applicationId, status = loan.Status, loan.LoanId });
+    }
+
     /// <summary>Just the current balance — a lighter payload than the full loan record for a UI that only needs this one figure.</summary>
     [HttpGet("{loanId}/balance")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoans)]
     public IActionResult GetBalance(string loanId)
     {
         var loan = _repository.GetLoan(loanId);
@@ -56,6 +79,7 @@ public class LoansController : ControllerBase
     /// stored principal, rate, and term — real math, not a stub.
     /// </summary>
     [HttpGet("{loanId}/schedule")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoans)]
     public IActionResult GetSchedule(string loanId, [FromQuery] int? termMonths = null)
     {
         var loan = _repository.GetLoan(loanId);
@@ -96,9 +120,11 @@ public class LoansController : ControllerBase
     }
 
     [HttpGet("{loanId}/payments")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingViewLoans)]
     public IActionResult GetPayments(string loanId) => Ok(_repository.GetPaymentsForLoan(loanId));
 
     [HttpPost("{loanId}/payments")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingPostPayments)]
     public IActionResult MakePayment(string loanId, [FromBody] MakePaymentRequest request)
     {
         var loan = _repository.GetLoan(loanId);
@@ -136,6 +162,7 @@ public class LoansController : ControllerBase
     /// record from the event that created it.
     /// </summary>
     [HttpPut("{loanId}")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingUpdateStatus)]
     public IActionResult UpdateLoan(string loanId, [FromBody] UpdateLoanRequest request)
     {
         var validStatuses = new[] { "Active", "Delinquent", "PaidOff" };
@@ -151,6 +178,7 @@ public class LoansController : ControllerBase
 
     /// <summary>Generates a simple statement summary — total paid to date, current balance, and a next-payment estimate.</summary>
     [HttpPost("{loanId}/statements")]
+    [Authorize(Policy = LoanPlatformPolicies.ServicingGenerateStatements)]
     public IActionResult GenerateStatement(string loanId)
     {
         var loan = _repository.GetLoan(loanId);

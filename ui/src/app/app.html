@@ -18,6 +18,14 @@
   <header class="header">
     <div class="brand">Loan Platform</div>
     <div class="header-right">
+      <div class="signed-in-as" *ngIf="currentUser() as user">
+        <span class="signed-in-avatar">{{ user.name.charAt(0) }}</span>
+        <span class="signed-in-text">
+          <span class="signed-in-name">{{ user.name }}</span>
+          <span class="signed-in-roles" *ngIf="user.roles.length; else noRole">{{ user.roles.join(', ') }}</span>
+          <ng-template #noRole><span class="signed-in-roles signed-in-roles--none">No role assigned</span></ng-template>
+        </span>
+      </div>
       <div class="system-status">
         <span class="system-status-label">System status</span>
         <span class="status-dot-group">
@@ -43,8 +51,12 @@
   </nav>
 
   <!-- New application: collapsed by default so checking on existing
-       applications doesn't mean scrolling past a 20+ field form first. -->
-  <section class="new-app-section" *ngIf="activeTab() === 'applications'">
+       applications doesn't mean scrolling past a 20+ field form first.
+       Gated to Origination.SubmitApplications' role list (LoanOfficer,
+       Admin) — a role without it would only get a 403 on submit, so the
+       whole entry point stays hidden rather than showing a form that
+       can't work. -->
+  <section class="new-app-section" *ngIf="activeTab() === 'applications' && hasAnyRole('LoanOfficer','Admin')">
     <button class="new-app-toggle" type="button" (click)="toggleNewApplicationForm()">
       {{ showNewApplicationForm() ? '− Cancel' : '+ New Application' }}
     </button>
@@ -135,14 +147,15 @@
       <span class="summary-value">{{ deniedCount }}</span>
       <span class="summary-label">Denied</span>
     </div>
-    <div class="summary-stat">
-      <span class="summary-value">{{ fundings.length }}</span>
-      <span class="summary-label">Funded</span>
+    <div class="summary-stat" [class.summary-stat--restricted]="fundingFullyRestricted" [title]="fundingFullyRestricted ? 'Your role doesn\'t have access to Funding data' : (accessRestricted().funding ? 'Full funding records are restricted for your role — showing status only' : null)">
+      <span class="summary-value" *ngIf="!fundingFullyRestricted; else restrictedDash">{{ fundedCount }}</span>
+      <span class="summary-label">Funded{{ fundingFullyRestricted ? ' (restricted)' : (accessRestricted().funding ? ' (status only)' : '') }}</span>
     </div>
-    <div class="summary-stat">
-      <span class="summary-value">{{ loans.length }}</span>
-      <span class="summary-label">Active Loans</span>
+    <div class="summary-stat" [class.summary-stat--restricted]="servicingFullyRestricted" [title]="servicingFullyRestricted ? 'Your role doesn\'t have access to Servicing data' : (accessRestricted().servicing ? 'Full loan records are restricted for your role — showing status only' : null)">
+      <span class="summary-value" *ngIf="!servicingFullyRestricted; else restrictedDash">{{ activeLoanCount }}</span>
+      <span class="summary-label">Active Loans{{ servicingFullyRestricted ? ' (restricted)' : (accessRestricted().servicing ? ' (status only)' : '') }}</span>
     </div>
+    <ng-template #restrictedDash><span class="summary-value summary-value--restricted">&mdash;</span></ng-template>
   </section>
 
   <!-- Applications: one row per application, its whole journey through
@@ -175,9 +188,14 @@
           <span class="mono app-amount">${{ row.application.requestedAmount | number }}</span>
 
           <span class="stage-stepper">
-            <span class="stage" *ngFor="let label of stageLabels; let i = index" [attr.data-status]="stageStatus(row, i)">
+            <span
+              class="stage"
+              *ngFor="let label of stageLabels; let i = index"
+              [attr.data-status]="stageStatus(row, i)"
+              [title]="stageStatus(row, i) === 'restricted' ? 'Your role doesn\'t have access to view this stage' : (stageIsStatusOnly(row, i) ? 'Status only — the full record is restricted for your role' : null)"
+            >
               <span class="stage-dot"></span>
-              <span class="stage-label">{{ label }}</span>
+              <span class="stage-label">{{ stageStatus(row, i) === 'restricted' ? 'Restricted' : label }}</span>
             </span>
           </span>
 
@@ -230,8 +248,12 @@
                    generated on click, never automatically, and never shown
                    to the applicant. See app.ts's generateCopilotSummary()
                    and UnderwritingController.GetCopilotSummary on the
-                   backend. -->
-              <div class="copilot-panel">
+                   backend. Gated to Underwriting.CopilotSummary's role list
+                   (Underwriter, Admin only — deliberately narrower than
+                   Underwriting.ViewDecisions, which Loan Officer does have,
+                   which is why this needed its own check rather than
+                   inheriting the surrounding decision card's visibility). -->
+              <div class="copilot-panel" *ngIf="hasAnyRole('Underwriter','Admin')">
                 <div class="copilot-header">
                   <span class="copilot-label">Underwriter co-pilot</span>
                   <button
@@ -278,7 +300,7 @@
               </div>
             </ng-template>
 
-            <div class="detail-card" *ngIf="row.funding as f">
+            <div class="detail-card" *ngIf="row.funding as f; else fundingStatusOnly">
               <h4 class="detail-card-title">Funding</h4>
               <dl class="detail-list">
                 <dt>Loan ID</dt>
@@ -293,8 +315,30 @@
                 <dd class="muted">{{ f.fundedAt | date:'short' }}</dd>
               </dl>
             </div>
+            <!-- No full Funding record — either your role only has status-level
+                 access (row.fundingStatus, from Funding.ViewFundingStatus) or
+                 none at all. Same pattern as the Underwriting pendingDecision
+                 template above: show what we actually know instead of hiding
+                 the card outright. -->
+            <ng-template #fundingStatusOnly>
+              <div class="detail-card detail-card--status-only" *ngIf="row.fundingStatus as fs; else fundingNoAccess">
+                <h4 class="detail-card-title">Funding</h4>
+                <span class="status-badge" [attr.data-status]="fs.status">{{ fs.status }}</span>
+                <dl class="detail-list" *ngIf="fs.loanId">
+                  <dt>Loan ID</dt>
+                  <dd class="mono">{{ fs.loanId }}</dd>
+                </dl>
+                <p class="muted status-only-note">Full funding details (amount, rate, disbursement method) are restricted for your role.</p>
+              </div>
+            </ng-template>
+            <ng-template #fundingNoAccess>
+              <div class="detail-card detail-card--pending" *ngIf="accessRestricted().funding">
+                <h4 class="detail-card-title">Funding</h4>
+                <p class="muted">Your role doesn't have access to Funding data.</p>
+              </div>
+            </ng-template>
 
-            <div class="detail-card" *ngIf="row.loan as l">
+            <div class="detail-card" *ngIf="row.loan as l; else loanStatusOnly">
               <h4 class="detail-card-title">Loan Servicing</h4>
               <dl class="detail-list">
                 <dt>Account #</dt>
@@ -309,11 +353,32 @@
                 <dd class="muted">{{ l.originatedAt | date:'short' }}</dd>
               </dl>
             </div>
+            <ng-template #loanStatusOnly>
+              <div class="detail-card detail-card--status-only" *ngIf="row.loanStatus as ls; else loanNoAccess">
+                <h4 class="detail-card-title">Loan Servicing</h4>
+                <span class="status-badge" [attr.data-status]="ls.status">{{ ls.status === 'NotStarted' ? 'Not started' : ls.status }}</span>
+                <dl class="detail-list" *ngIf="ls.loanId">
+                  <dt>Loan ID</dt>
+                  <dd class="mono">{{ ls.loanId }}</dd>
+                </dl>
+                <p class="muted status-only-note" *ngIf="ls.status !== 'NotStarted'">Full loan details (balance, payment history, schedule) are restricted for your role.</p>
+              </div>
+            </ng-template>
+            <ng-template #loanNoAccess>
+              <div class="detail-card detail-card--pending" *ngIf="accessRestricted().servicing">
+                <h4 class="detail-card-title">Loan Servicing</h4>
+                <p class="muted">Your role doesn't have access to Servicing data.</p>
+              </div>
+            </ng-template>
           </div>
 
           <!-- Document extraction (Claude) — scoped to this application;
-               extractApplicationId is set automatically on expand. -->
-          <div class="doc-extract-card">
+               extractApplicationId is set automatically on expand. Gated to
+               Origination.ManageDocuments' role list (LoanOfficer,
+               LoanProcessor, Admin) for the same reason as New Application
+               above — both the extract and confirm-save calls below hit
+               that policy. -->
+          <div class="doc-extract-card" *ngIf="hasAnyRole('LoanOfficer','LoanProcessor','Admin')">
             <h3 class="section-title">Extract Data from a Loan Document</h3>
             <p class="doc-extract-hint">
               Upload a pay stub, W-2, bank statement, or ID — Claude reads it and pulls out the key

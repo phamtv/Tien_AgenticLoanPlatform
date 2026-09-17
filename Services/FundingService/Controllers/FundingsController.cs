@@ -28,9 +28,11 @@ public class FundingsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = LoanPlatformPolicies.FundingViewFunding)]
     public IActionResult GetAll() => Ok(_repository.GetAll());
 
     [HttpGet("{applicationId}")]
+    [Authorize(Policy = LoanPlatformPolicies.FundingViewFunding)]
     public IActionResult GetByApplicationId(string applicationId)
     {
         var record = _repository.GetByApplicationId(applicationId);
@@ -39,8 +41,16 @@ public class FundingsController : ControllerBase
             : Ok(record);
     }
 
-    /// <summary>Lightweight status check, mirroring the pattern used on the other three services.</summary>
+    /// <summary>
+    /// Lightweight status check, mirroring the pattern used on the other
+    /// three services. Gated by the narrower FundingViewFundingStatus
+    /// policy (not FundingViewFunding) on purpose — this endpoint returns
+    /// no financial detail, so roles like Loan Officer that don't own
+    /// Funding's records but do need to know whether a loan funded can use
+    /// it without being granted the full record-level policy.
+    /// </summary>
     [HttpGet("{applicationId}/status")]
+    [Authorize(Policy = LoanPlatformPolicies.FundingViewFundingStatus)]
     public IActionResult GetStatus(string applicationId)
     {
         var record = _repository.GetByApplicationId(applicationId);
@@ -57,6 +67,7 @@ public class FundingsController : ControllerBase
     /// since time has passed and the loan amount is now committed.
     /// </summary>
     [HttpPost("{applicationId}/verify")]
+    [Authorize(Policy = LoanPlatformPolicies.FundingVerify)]
     public IActionResult Verify(string applicationId, [FromBody] VerifyRequest request)
     {
         _logger.LogInformation("Running pre-disbursement verification for application {ApplicationId}", applicationId);
@@ -70,6 +81,7 @@ public class FundingsController : ControllerBase
     /// approved exception case). Publishes the same LoanFundedEvent either way.
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = LoanPlatformPolicies.FundingDisburse)]
     public async Task<IActionResult> ManualFund([FromBody] ManualFundRequest request)
     {
         _logger.Trace(request.ApplicationId, "ManualFund.Start", "Manual fund_loan/disburse_loan called", new { request.ApprovedAmount, request.InterestRate, request.TermMonths, request.DisbursementMethod });
@@ -102,6 +114,7 @@ public class FundingsController : ControllerBase
 
     /// <summary>Alias endpoint matching the REST convention .../disburse for an explicit action verb, delegating to the same logic as the manual POST above.</summary>
     [HttpPost("{applicationId}/disburse")]
+    [Authorize(Policy = LoanPlatformPolicies.FundingDisburse)]
     public Task<IActionResult> Disburse(string applicationId, [FromBody] ManualFundRequest request) =>
         ManualFund(request with { ApplicationId = applicationId });
 }

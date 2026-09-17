@@ -46,6 +46,7 @@ builder.Services.AddSingleton<IKeyVaultService, EnvKeyVaultService>();
 
 // --- Auth (Microsoft Entra ID) ---
 builder.AddLoanPlatformEntraIdAuth();
+builder.Services.AddLoanPlatformAuthorizationPolicies();
 builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
 
 // --- Event bus ---

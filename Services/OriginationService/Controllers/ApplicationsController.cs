@@ -75,9 +75,11 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationViewApplications)]
     public IActionResult GetAll() => Ok(_repository.GetAll());
 
     [HttpGet("{id}")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationViewApplications)]
     public IActionResult GetById(string id)
     {
         var application = _repository.GetById(id);
@@ -85,6 +87,7 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpGet("{id}/status")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationViewApplications)]
     public IActionResult GetStatus(string id)
     {
         var application = _repository.GetById(id);
@@ -92,6 +95,7 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationEditApplications)]
     public IActionResult Update(string id, [FromBody] UpdateApplicationRequest request)
     {
         var existing = _repository.GetById(id);
@@ -110,6 +114,7 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpPost("{id}/documents")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationManageDocuments)]
     public IActionResult UploadDocument(string id, [FromBody] UploadDocumentRequest request)
     {
         if (_repository.GetById(id) is null) return NotFound(new { error = $"No application found with id {id}" });
@@ -126,6 +131,7 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpGet("{id}/documents")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationViewDocuments)]
     public IActionResult GetDocuments(string id) => Ok(_documentRepository.GetForApplication(id));
 
     /// <summary>
@@ -138,6 +144,7 @@ public class ApplicationsController : ControllerBase
     /// </summary>
     [HttpPost("{id}/documents/extract")]
     [RequestSizeLimit(20_000_000)] // 20MB — generous for a scanned multi-page PDF or a phone photo
+    [Authorize(Policy = LoanPlatformPolicies.OriginationManageDocuments)]
     public async Task<IActionResult> ExtractDocument(string id, IFormFile file, [FromForm] string documentType)
     {
         if (_repository.GetById(id) is null) return NotFound(new { error = $"No application found with id {id}" });
@@ -168,6 +175,7 @@ public class ApplicationsController : ControllerBase
     }
 
     [HttpPost("{id}/credit-check")]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationRunCreditCheck)]
     public async Task<IActionResult> RunCreditCheck(string id, [FromQuery] string? bureau)
     {
         var application = _repository.GetById(id);
@@ -195,6 +203,7 @@ public class ApplicationsController : ControllerBase
     /// for Underwriting to compute actual DTI and LTV ratios.
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = LoanPlatformPolicies.OriginationSubmitApplications)]
     public async Task<IActionResult> Submit([FromBody] SubmitApplicationRequest request)
     {
         var applicationId = $"APP-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";

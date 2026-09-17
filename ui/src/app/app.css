@@ -35,6 +35,65 @@
   flex-wrap: wrap;
 }
 
+/* Signed-in-as indicator: shows who's actually authenticated and what
+   Entra ID app role(s) their token carries — display-only (see
+   App.decodeTokenClaims's own comment), added once testing with several
+   role-scoped accounts (Trenton/Taylor/Tam/Tien) at once made it clear
+   you can't tell who's signed in just by looking at the dashboard.
+   Styled as a pill to match .system-status rather than competing with it
+   visually — this is identity, that's operational health. */
+.signed-in-as {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  background: #eef2f1;
+}
+
+.signed-in-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2f6f5c;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.signed-in-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.signed-in-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #14262b;
+}
+
+.signed-in-roles {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #5c7570;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* A signed-in user with no app role assigned will get a 403 on every
+   business endpoint — worth flagging visually rather than just showing
+   an empty roles list, since it looks identical to "signed in fine"
+   otherwise. */
+.signed-in-roles--none {
+  color: #b3542f;
+}
+
 /* System status: deliberately small, dot-based, and explicitly labeled -
    these are the same four service names used as stage labels in the
    applications list below, so this needs to read as clearly different
@@ -355,6 +414,20 @@
   color: #14262b;
 }
 
+/* Restricted (403, not "genuinely zero") reads as visually distinct from
+   an ordinary count — an em dash instead of a number, warm border/tint
+   instead of the plain white/gray default, and the label itself says
+   "(restricted)". See accessRestricted in app.ts for how this gets set. */
+.summary-stat--restricted {
+  background: #fdf6ef;
+  border-color: #e8d3b8;
+}
+
+.summary-value--restricted {
+  color: #b3542f;
+  font-weight: 600;
+}
+
 .summary-label {
   font-size: 11px;
   font-weight: 600;
@@ -522,6 +595,18 @@
   color: #b7c0bc;
 }
 
+/* Restricted: this stage isn't "not reached yet" (pending) or "blocked
+   by a denial" — the signed-in role just isn't allowed to see it. Warm
+   amber rather than gray so it doesn't read as either of those. */
+.stage[data-status='restricted'] .stage-dot {
+  border-color: #b3542f;
+  background: #fdf6ef;
+}
+.stage[data-status='restricted'] .stage-label {
+  color: #b3542f;
+  font-weight: 600;
+}
+
 /* Expanded application detail - one card per stage of the journey */
 .detail-grid {
   display: grid;
@@ -539,6 +624,20 @@
 
 .detail-card--pending {
   color: #8a9490;
+}
+
+/* Funding/Servicing detail cards rendered from the status-only fallback
+   (row.fundingStatus/row.loanStatus) rather than the full record — see
+   app.html's #fundingStatusOnly / #loanStatusOnly templates. Same base
+   card, just an amber accent so it reads as "narrower view," matching the
+   amber used elsewhere for restricted/status-only state (.stage[data-status='restricted'], .summary-stat--restricted). */
+.detail-card--status-only {
+  border-color: #e8d3b8;
+}
+
+.status-only-note {
+  margin-top: 10px;
+  font-size: 12px;
 }
 
 .detail-card-title {

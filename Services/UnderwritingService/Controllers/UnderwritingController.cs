@@ -38,6 +38,7 @@ public class UnderwritingController : ControllerBase
     }
 
     [HttpGet("{applicationId}/decision")]
+    [Authorize(Policy = LoanPlatformPolicies.UnderwritingViewDecisions)]
     public IActionResult GetDecision(string applicationId)
     {
         var record = _repository.GetByApplicationId(applicationId);
@@ -48,6 +49,7 @@ public class UnderwritingController : ControllerBase
 
     /// <summary>Just the risk-relevant figures — credit score, DTI, LTV, approval outcome — without the full decision payload.</summary>
     [HttpGet("{applicationId}/risk-score")]
+    [Authorize(Policy = LoanPlatformPolicies.UnderwritingViewDecisions)]
     public IActionResult GetRiskScore(string applicationId)
     {
         var record = _repository.GetByApplicationId(applicationId);
@@ -80,6 +82,7 @@ public class UnderwritingController : ControllerBase
     /// never shown or sent to the applicant.
     /// </summary>
     [HttpPost("{applicationId}/copilot-summary")]
+    [Authorize(Policy = LoanPlatformPolicies.UnderwritingCopilotSummary)]
     public async Task<IActionResult> GetCopilotSummary(string applicationId, [FromQuery] bool regenerate = false)
     {
         var record = _repository.GetByApplicationId(applicationId);
@@ -157,6 +160,7 @@ public class UnderwritingController : ControllerBase
     /// decision down after real money has moved on the strength of it.
     /// </summary>
     [HttpPost("{applicationId}/evaluate")]
+    [Authorize(Policy = LoanPlatformPolicies.UnderwritingEvaluate)]
     public async Task<IActionResult> Evaluate(string applicationId, [FromBody] ManualEvaluateRequest request)
     {
         _logger.Trace(applicationId, "Evaluate.Start", "Manual evaluate_application called", new { request.RequestedAmount, request.CreditScore, request.ExistingMonthlyDebt, request.MonthlyIncome, request.VehicleValue, request.TermMonths });

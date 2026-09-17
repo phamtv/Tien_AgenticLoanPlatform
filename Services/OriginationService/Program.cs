@@ -83,6 +83,7 @@ builder.Services.AddHttpClient<IClaudeDocumentExtractionService, ClaudeDocumentE
 // See Common/Auth/EntraIdAuthExtensions.cs and this file's AzureAd config
 // section below.
 builder.AddLoanPlatformEntraIdAuth();
+builder.Services.AddLoanPlatformAuthorizationPolicies();
 
 // --- Email notifications ---
 builder.Services.AddSingleton<IEmailService, SmtpEmailService>();

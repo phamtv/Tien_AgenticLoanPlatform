@@ -37,6 +37,12 @@ public class SqlLoanRepository : ILoanRepository
         return entity is null ? null : ToModel(entity);
     }
 
+    public Loan? GetLoanByApplicationId(string applicationId)
+    {
+        var entity = _db.Loans.FirstOrDefault(l => l.ApplicationId == applicationId);
+        return entity is null ? null : ToModel(entity);
+    }
+
     public IReadOnlyList<Loan> GetAllLoans() => _db.Loans.Select(l => ToModel(l)).ToList();
 
     public PaymentRecord AddPayment(PaymentRecord payment)

@@ -21,6 +21,8 @@ public interface ILoanRepository
 {
     Loan AddLoan(Loan loan);
     Loan? GetLoan(string loanId);
+    /// <summary>Looks a loan up by the applicationId it originated from, rather than its own LoanId — needed for the lightweight status endpoint, which is reached the same way the UI joins everything else (by applicationId).</summary>
+    Loan? GetLoanByApplicationId(string applicationId);
     IReadOnlyList<Loan> GetAllLoans();
     PaymentRecord AddPayment(PaymentRecord payment);
     IReadOnlyList<PaymentRecord> GetPaymentsForLoan(string loanId);
@@ -41,6 +43,9 @@ public class InMemoryLoanRepository : ILoanRepository
     }
 
     public Loan? GetLoan(string loanId) => _loans.GetValueOrDefault(loanId);
+
+    public Loan? GetLoanByApplicationId(string applicationId) =>
+        _loans.Values.FirstOrDefault(l => l.ApplicationId == applicationId);
 
     public IReadOnlyList<Loan> GetAllLoans() => _loans.Values.ToList();
 
